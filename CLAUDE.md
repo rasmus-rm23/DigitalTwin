@@ -127,8 +127,16 @@ src-tauri/src/          Rust core
 sidecar/                Python data/ML engine
   src/digitaltwin_sidecar/  rpc.py (protocol), methods.py (method registry)
   tests/
-sample-data/            small synthetic files for manual testing (never real plant data)
 ```
+
+Data files live outside the repo, in `C:\data_area\DigitalTwin\input_data\`. Never commit plant
+data. Tests generate their own input files.
+
+`sample_data\` is a synthetic set built by `generate_sample_data.py` in that folder: a 1-minute
+SCADA log (`destillation_scada.csv`), batch metadata (`batch_metadata.csv`: batch no., product id,
+product, start/end) and QC results (`qc_analyser.xlsx`: analysis time, product id, pesticide in the
+distillation residue). Product id links QC to batches; batch start/end link batches to SCADA time.
+All times are Copenhagen local and span the end of DST on 2024-10-27.
 
 Project files use the extension `.dtwin` (a SQLite database inside).
 

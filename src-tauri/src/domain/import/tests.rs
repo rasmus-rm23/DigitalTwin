@@ -192,15 +192,22 @@ fn large_import() {
     assert_eq!(result.table.row_count, 1_000_000);
 }
 
-/// The bundled sample crosses the end of DST: 02:00-02:59 local appears twice.
+/// A minute-by-minute local-time log across the end of DST: 02:00-02:59 appears twice.
 #[test]
-fn sample_scada_file_is_monotonic_across_dst() {
+fn scada_log_is_monotonic_across_dst() {
     let dir = tempfile::tempdir().unwrap();
     let mut p = project(dir.path());
-    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sample-data/destillation_scada.csv");
+
+    // Windows-1252 header (0xB3 = ³), CRLF line endings, decimal comma.
+    let mut csv = b"Tidspunkt;Produktdensitet (kg/m\xb3)\r\n".to_vec();
+    let minutes = (0..180).chain(120..360); // 00:00-02:59, then 02:00-05:59 again
+    for (i, m) in minutes.enumerate() {
+        csv.extend(format!("27-10-2024 {:02}:{:02};812,{}\r\n", m / 60, m % 60, i % 10).as_bytes());
+    }
+    let file = write(dir.path(), "scada.csv", &csv);
 
     let pv = preview(&p.conn, &file, PreviewSettings::default()).unwrap();
-    assert_eq!(pv.columns[2].name, "Produktdensitet (kg/m³)");
+    assert_eq!(pv.columns[1].name, "Produktdensitet (kg/m³)");
     let opts = options_from(pv, "Europe/Copenhagen");
     let result = run(&mut p.conn, &file, &opts, |_| {}).unwrap();
     assert_eq!(result.table.row_count, 420);
