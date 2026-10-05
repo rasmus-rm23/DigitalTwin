@@ -249,3 +249,208 @@ table.kv th {
 .statusbar-msg {
   margin-left: auto;
 }
+
+/* --- Form controls --- */
+input,
+select {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 3px 6px;
+}
+input:focus,
+select:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+input:disabled,
+select:disabled {
+  opacity: 0.5;
+}
+.mono {
+  font-family: Consolas, monospace;
+}
+button.icon {
+  border: none;
+  background: transparent;
+  padding: 0 6px;
+  color: var(--fg-muted);
+}
+button.icon:hover {
+  color: var(--fg);
+}
+
+/* --- Modal --- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+.modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 95vw;
+  max-height: 90vh;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.modal-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.modal-footer > span {
+  flex: 1;
+}
+
+/* --- Import dialog --- */
+.import-dialog {
+  width: 1100px;
+  height: 80vh;
+}
+.import-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 12px 16px;
+  align-items: flex-end;
+}
+.import-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+.import-settings label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+.import-preview {
+  flex: 1;
+  overflow: auto;
+  margin: 0 16px 12px;
+  border: 1px solid var(--border);
+}
+.import-preview th {
+  vertical-align: top;
+}
+.import-preview th > * {
+  display: block;
+  width: 100%;
+  min-width: 110px;
+  margin-bottom: 2px;
+}
+.import-preview .skipped {
+  opacity: 0.4;
+}
+
+/* --- Data grid --- */
+table.grid {
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+table.grid th,
+table.grid td {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 2px 8px;
+  text-align: left;
+}
+table.grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-bar);
+  font-weight: 600;
+}
+table.grid td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+table.grid .rownum {
+  color: var(--fg-muted);
+  text-align: right;
+}
+table.grid th .kind {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+/* --- Table view --- */
+.table-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.table-view-info {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table-view-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+/* --- Explorer --- */
+.explorer-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 0;
+}
+.explorer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.explorer-list li {
+  display: flex;
+  align-items: center;
+}
+.explorer-list li button.icon {
+  visibility: hidden;
+}
+.explorer-list li:hover {
+  background: var(--bg-hover);
+}
+.explorer-list li:hover button.icon {
+  visibility: visible;
+}
+.explorer-item {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  border: none;
+  background: transparent !important;
+  padding: 3px 4px;
+}

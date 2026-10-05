@@ -111,9 +111,15 @@ React UI  ──Tauri commands/events──▶  Rust core  ──JSON-RPC over s
 src/                    React frontend
   api/backend.ts          typed wrappers for every Tauri command (mirror of commands.rs)
   start/                  start screen (new/open project)
-  workspace/              shell: MenuBar, ToolPanel (left/right tool windows), views.tsx (main-area tabs)
+  import/                 ImportDialog (preview + column settings)
+  tables/                 TableView (virtualized, paged grid)
+  workspace/              shell: MenuBar, ToolPanel (left/right tool windows), ExplorerTool,
+                          views.tsx (main-area tabs + dockview component registry)
 src-tauri/src/          Rust core
   domain/                 domain logic; db.rs holds the SQLite migrations
+    import/               CSV/spreadsheet import: source.rs (reading, encoding/delimiter
+                          detection), convert.rs (type inference, number/date parsing, DST)
+    tables.rs             catalog + row access for imported tables (all data_<id> SQL lives here)
   commands.rs             thin Tauri command wrappers (async, so they stay off the UI thread)
   sidecar.rs              JSON-RPC client for the Python sidecar
   state.rs                AppState: open project + sidecar process
@@ -121,9 +127,23 @@ src-tauri/src/          Rust core
 sidecar/                Python data/ML engine
   src/digitaltwin_sidecar/  rpc.py (protocol), methods.py (method registry)
   tests/
+sample-data/            small synthetic files for manual testing (never real plant data)
 ```
 
 Project files use the extension `.dtwin` (a SQLite database inside).
+
+### Imported tables
+
+- Catalog: `data_table` (name, source path, import options as JSON) and `data_column`
+  (name, kind). Rows live in `data_<id>` with columns `c0, c1, ...` in catalog order plus
+  `_row INTEGER PRIMARY KEY` for import order. Types: number → REAL, text → TEXT,
+  datetime → INTEGER epoch ms UTC. User-facing names never appear in SQL identifiers.
+- Import runs in one transaction. Unparseable cells become NULL and are reported as warnings.
+- Local timestamps are converted with the chosen IANA zone. In the repeated autumn DST hour the
+  earlier instant is used unless that would not move the series forward (sequential logs). In the
+  skipped spring hour the time is shifted +1 h. Both are counted in the warnings.
+- Throughput: ~1M rows × 6 columns in under 2 s (release). Check with
+  `cargo test --release -- --ignored large_import`.
 
 ### Adding a feature end to end
 
@@ -131,8 +151,9 @@ Project files use the extension `.dtwin` (a SQLite database inside).
 2. Command wrapper in `commands.rs` → register it in `lib.rs` → typed wrapper in `src/api/backend.ts`.
 3. If it needs Python: a function in `sidecar/.../methods.py`, registered in `METHODS`, called via
    `Sidecar::call`.
-4. UI: a new main-area view goes in `VIEWS` (`views.tsx`); a tool window goes in `LEFT_TOOLS` or
-   `RIGHT_TOOLS` (`Workspace.tsx`).
+4. UI: a singleton main-area view goes in `VIEWS` (`views.tsx`); a per-item view (like a table)
+   gets a component key in `VIEW_COMPONENTS`; a tool window goes in `leftTools` or `RIGHT_TOOLS`
+   (`Workspace.tsx`).
 
 ## Commands
 
@@ -158,12 +179,18 @@ or the sidecar must be killed.
 - rusqlite 0.40 has no `usize` conversion. Use `i64` for SQL integers.
 - dockview: use the `dockview-react` package (v8 `dockview` is framework-agnostic core only).
 - The sidecar's stdout carries the JSON-RPC stream only. Log to stderr.
+- CSV is split by our own `split_record` (`import/source.rs`), not the `csv` crate. The crate's
+  record line numbers and byte offsets are wrong with CRLF line endings and blank lines, and
+  warnings need exact line numbers.
+- Commands lock the project mutex for their whole run, so a long import blocks other project
+  commands until it finishes.
 
 ## Not yet implemented
 
 - MCP server (planned: embedded in the app, wrapping the same domain functions as `commands.rs`).
 - Sidecar packaging for release builds (`Sidecar::spawn` only handles dev).
 - Long-running sidecar jobs with progress/cancel (the current client is a blocking request/response).
+- Import: cancel, re-import from the stored options, appending to an existing table.
 
 ## Open decisions
 
@@ -172,5 +199,5 @@ or the sidecar must be killed.
 - Python sidecar packaging (PyInstaller vs embedded Python distribution) and environment
   management (uv recommended but not installed yet; plain venv + pip works today).
 - MCP transport for the embedded server (stdio via a launcher vs local HTTP/SSE).
-- Large-data strategy: whether time-series tables live in SQLite or in Parquet files next to
-  the project file.
+- Data tables are in SQLite (fine up to ~1M rows per table). If much larger data appears, move
+  storage behind `domain/tables.rs` (e.g. to Parquet) without changing callers.

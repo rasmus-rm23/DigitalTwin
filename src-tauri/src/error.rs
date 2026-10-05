@@ -14,6 +14,14 @@ pub enum AppError {
     InvalidInput(String),
     #[error("sidecar error: {0}")]
     Sidecar(String),
+    #[error("could not read file: {0}")]
+    Parse(String),
+}
+
+impl From<calamine::Error> for AppError {
+    fn from(e: calamine::Error) -> Self {
+        AppError::Parse(e.to_string())
+    }
 }
 
 /// Errors cross the Tauri/MCP boundary as `{ kind, message }`.
@@ -27,6 +35,7 @@ impl Serialize for AppError {
             AppError::NoProject => "noProject",
             AppError::InvalidInput(_) => "invalidInput",
             AppError::Sidecar(_) => "sidecar",
+            AppError::Parse(_) => "parse",
         };
         let mut s = serializer.serialize_struct("AppError", 2)?;
         s.serialize_field("kind", kind)?;

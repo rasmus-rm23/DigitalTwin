@@ -2,4 +2,6 @@
 //! (later) MCP tools are thin wrappers over it.
 
 pub mod db;
+pub mod import;
 pub mod project;
+pub mod tables;

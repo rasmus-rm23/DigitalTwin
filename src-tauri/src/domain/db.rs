@@ -15,6 +15,25 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL
     );
     "#,
+    // 2: imported data tables. Each table's rows live in `data_<id>` with columns
+    //    c0, c1, ... (REAL for number, TEXT for text, INTEGER epoch ms UTC for datetime).
+    r#"
+    CREATE TABLE data_table (
+        id             INTEGER PRIMARY KEY,
+        name           TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        source_path    TEXT,
+        import_options TEXT NOT NULL,
+        row_count      INTEGER NOT NULL,
+        imported_at    TEXT NOT NULL
+    );
+    CREATE TABLE data_column (
+        table_id INTEGER NOT NULL REFERENCES data_table(id) ON DELETE CASCADE,
+        ordinal  INTEGER NOT NULL,
+        name     TEXT NOT NULL,
+        kind     TEXT NOT NULL CHECK (kind IN ('number', 'text', 'datetime')),
+        PRIMARY KEY (table_id, ordinal)
+    );
+    "#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {

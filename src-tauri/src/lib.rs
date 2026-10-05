@@ -15,6 +15,11 @@ pub fn run() {
             commands::project_open,
             commands::project_close,
             commands::project_current,
+            commands::import_preview,
+            commands::import_run,
+            commands::tables_list,
+            commands::table_rows,
+            commands::table_delete,
             commands::sidecar_ping,
         ])
         .run(tauri::generate_context!())

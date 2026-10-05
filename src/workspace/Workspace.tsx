@@ -1,8 +1,11 @@
+import { ask, message, open } from "@tauri-apps/plugin-dialog";
 import { DockviewApi, DockviewReact, DockviewReadyEvent, themeDark } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
-import { useEffect, useRef, useState } from "react";
-import { backend, errorMessage, ProjectInfo } from "../api/backend";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { backend, errorMessage, IMPORT_EXTENSIONS, ImportResult, ProjectInfo, TableInfo } from "../api/backend";
 import { createProjectWithDialog, openProjectWithDialog } from "../api/projectDialogs";
+import ImportDialog from "../import/ImportDialog";
+import ExplorerTool from "./ExplorerTool";
 import MenuBar, { Menu } from "./MenuBar";
 import ToolPanel, { ToolPanelState, ToolWindow } from "./ToolPanel";
 import { VIEW_COMPONENTS, VIEWS } from "./views";
@@ -11,11 +14,6 @@ interface Props {
   project: ProjectInfo;
   onProjectChange: (project: ProjectInfo | null) => void;
 }
-
-const LEFT_TOOLS: ToolWindow[] = [
-  { id: "explorer", title: "Explorer", render: () => <p className="muted">Project items</p> },
-  { id: "variables", title: "Variables", render: () => <p className="muted">Inputs and outputs</p> },
-];
 
 const RIGHT_TOOLS: ToolWindow[] = [
   { id: "properties", title: "Properties", render: () => <p className="muted">Selection properties</p> },
@@ -41,7 +39,18 @@ function loadPanels() {
 export default function Workspace({ project, onProjectChange }: Props) {
   const [panels, setPanels] = useState(loadPanels);
   const [status, setStatus] = useState("");
+  const [tables, setTables] = useState<TableInfo[]>([]);
+  const [importPath, setImportPath] = useState<string | null>(null);
   const dockApi = useRef<DockviewApi | null>(null);
+
+  const refreshTables = useCallback(() => {
+    backend
+      .tablesList()
+      .then(setTables)
+      .catch((e) => setStatus(errorMessage(e)));
+  }, []);
+
+  useEffect(refreshTables, [refreshTables, project.path]);
 
   useEffect(() => {
     try {
@@ -62,6 +71,64 @@ export default function Workspace({ project, onProjectChange }: Props) {
     const view = VIEWS.find((v) => v.id === id)!;
     api.addPanel({ id, component: id, title: view.title, params: { project } });
   }
+
+  function openTable(table: TableInfo) {
+    const api = dockApi.current;
+    if (!api) return;
+    const id = `table:${table.id}`;
+    const existing = api.getPanel(id);
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+    api.addPanel({ id, component: "table", title: table.name, params: { table } });
+  }
+
+  async function startImport() {
+    const path = await open({
+      title: "Import data",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "CSV or spreadsheet", extensions: IMPORT_EXTENSIONS }],
+    });
+    if (path) setImportPath(path);
+  }
+
+  async function onImported(result: ImportResult) {
+    setImportPath(null);
+    refreshTables();
+    openTable(result.table);
+    setStatus(`Imported ${result.table.rowCount.toLocaleString()} rows into "${result.table.name}"`);
+    if (result.warnings.length > 0) {
+      await message(result.warnings.join("\n\n"), { title: "Import warnings", kind: "warning" });
+    }
+  }
+
+  async function deleteTable(table: TableInfo) {
+    const ok = await ask(`Delete table "${table.name}"? This cannot be undone.`, {
+      title: "Delete table",
+      kind: "warning",
+    });
+    if (!ok) return;
+    try {
+      await backend.tableDelete(table.id);
+      dockApi.current?.getPanel(`table:${table.id}`)?.api.close();
+      refreshTables();
+    } catch (e) {
+      setStatus(errorMessage(e));
+    }
+  }
+
+  const leftTools: ToolWindow[] = [
+    {
+      id: "explorer",
+      title: "Explorer",
+      render: () => (
+        <ExplorerTool tables={tables} onImport={startImport} onOpenTable={openTable} onDeleteTable={deleteTable} />
+      ),
+    },
+    { id: "variables", title: "Variables", render: () => <p className="muted">Inputs and outputs</p> },
+  ];
 
   function onReady(event: DockviewReadyEvent) {
     dockApi.current = event.api;
@@ -92,6 +159,8 @@ export default function Workspace({ project, onProjectChange }: Props) {
         { label: "New Project…", onClick: () => switchProject(createProjectWithDialog) },
         { label: "Open Project…", onClick: () => switchProject(openProjectWithDialog) },
         { label: "", separator: true },
+        { label: "Import Data�", onClick: startImport },
+        { label: "", separator: true },
         { label: "Close Project", onClick: closeProject },
       ],
     },
@@ -112,7 +181,7 @@ export default function Workspace({ project, onProjectChange }: Props) {
       <div className="workspace-body">
         <ToolPanel
           side="left"
-          tools={LEFT_TOOLS}
+          tools={leftTools}
           state={panels.left}
           onChange={(left) => setPanels((p) => ({ ...p, left }))}
         />
@@ -132,6 +201,9 @@ export default function Workspace({ project, onProjectChange }: Props) {
           onChange={(right) => setPanels((p) => ({ ...p, right }))}
         />
       </div>
+      {importPath && (
+        <ImportDialog path={importPath} onClose={() => setImportPath(null)} onImported={onImported} />
+      )}
       <div className="statusbar">
         <span>{project.name}</span>
         <span className="statusbar-msg">{status}</span>

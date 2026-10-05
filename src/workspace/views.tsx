@@ -1,6 +1,7 @@
 import { IDockviewPanelProps } from "dockview-react";
 import { FunctionComponent, useState } from "react";
 import { backend, errorMessage, ProjectInfo } from "../api/backend";
+import TableView from "../tables/TableView";
 
 /** Document views that can be opened as tabs in the main area. */
 export interface ViewDef {
@@ -47,7 +48,6 @@ function OverviewView({ params }: IDockviewPanelProps<{ project: ProjectInfo }>)
 
 export const VIEWS: ViewDef[] = [
   { id: "overview", title: "Overview", component: OverviewView },
-  { id: "tables", title: "Tables", component: () => <Placeholder text="Imported tables (CSV/XLSX)" /> },
   { id: "relations", title: "Relations", component: () => <Placeholder text="Tabular model: relations between tables" /> },
   { id: "pid", title: "P&ID", component: () => <Placeholder text="Process & instrumentation diagram" /> },
   { id: "plots", title: "Plots", component: () => <Placeholder text="Measured vs. model plots" /> },
@@ -55,4 +55,8 @@ export const VIEWS: ViewDef[] = [
   { id: "simulation", title: "Simulation", component: () => <Placeholder text="What-if scenarios and optimisation" /> },
 ];
 
-export const VIEW_COMPONENTS = Object.fromEntries(VIEWS.map((v) => [v.id, v.component]));
+/** Dockview component registry: singleton views plus per-item views like tables. */
+export const VIEW_COMPONENTS: Record<string, FunctionComponent<IDockviewPanelProps>> = {
+  ...Object.fromEntries(VIEWS.map((v) => [v.id, v.component])),
+  table: TableView as FunctionComponent<IDockviewPanelProps>,
+};
