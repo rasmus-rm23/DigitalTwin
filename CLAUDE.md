@@ -132,11 +132,8 @@ sidecar/                Python data/ML engine
 Data files live outside the repo, in `C:\data_area\DigitalTwin\input_data\`. Never commit plant
 data. Tests generate their own input files.
 
-`sample_data\` is a synthetic set built by `generate_sample_data.py` in that folder: a 1-minute
-SCADA log (`destillation_scada.csv`), batch metadata (`batch_metadata.csv`: batch no., product id,
-product, start/end) and QC results (`qc_analyser.xlsx`: analysis time, product id, pesticide in the
-distillation residue). Product id links QC to batches; batch start/end link batches to SCADA time.
-All times are Copenhagen local and span the end of DST on 2024-10-27.
+`sample_data\` holds synthetic sample files (SCADA log, batch metadata, QC results) produced by a
+separate project. Do not generate sample data from this repo.
 
 Project files use the extension `.dtwin` (a SQLite database inside).
 
