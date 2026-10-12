@@ -6,6 +6,7 @@ import platform
 from typing import Any
 
 from . import __version__
+from .optimisation import optimise
 from .rpc import Handler
 from .simulation import simulate
 from .training import train
@@ -19,4 +20,5 @@ METHODS: dict[str, Handler] = {
     "ping": ping,
     "train": train,
     "simulate": simulate,
+    "optimise": optimise,
 }

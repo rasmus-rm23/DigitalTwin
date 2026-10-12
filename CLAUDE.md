@@ -128,7 +128,7 @@ src/                    React frontend
   models/                 Models view: ModelsView (list), ModelEditor (5 steps), ModelResults,
                           ModelBatchesPanel (right-panel tab)
   simulation/             Simulation view: SimulationView (list), SimulationEditor (model, time,
-                          input setpoint profiles, run, result plots)
+                          input setpoint profiles, run, result plots), OptimisePanel (step 5)
   plots/                  Plots view: PlotsView (sheet, data loading, cards), PlotChart (uPlot),
                           BatchesPanel / PlotSettingsPanel (right-panel tabs), data.ts (batch merge)
   pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
@@ -147,7 +147,8 @@ src-tauri/src/          Rust core
     plots.rs              plot sheets + batch list and batch-aligned series queries
     column_type.rs        change a column's type in place (keeps table id and column position)
     models.rs             ML model definitions, training-request assembly, stored results
-    simulations.rs        what-if simulations: settings, input profiles, run-request assembly, results
+    simulations.rs        what-if simulations and input optimisation: settings, input profiles,
+                          request assembly, results
   commands.rs             thin Tauri command wrappers (async, so they stay off the UI thread)
   sidecar.rs              JSON-RPC client for the Python sidecar
   state.rs                AppState: open project + sidecar process
@@ -155,7 +156,8 @@ src-tauri/src/          Rust core
 sidecar/                Python data/ML engine
   src/digitaltwin_sidecar/  rpc.py (protocol), methods.py (method registry), features.py (delay +
                             Gaussian smoothing), training.py (linear / MLP per output),
-                            simulation.py (input profiles through a trained model)
+                            simulation.py (Simulator: input profiles through a trained model),
+                            optimisation.py (manipulable inputs within bounds, scipy)
   tests/
 ```
 
@@ -263,7 +265,25 @@ Project files use the extension `.dtwin` (a SQLite database inside).
   value) until after the end, so every delay/smoothing window is defined and the output exists
   from t = 0. Warns when a profile leaves an input's measured range (extrapolation).
 - `simulation_run` works like `model_train`: `run_request` under the lock, sidecar call without it,
-  `store_run`. `stale` = settings changed or the model was retrained since the run.
+  `store_run`. `stale` = settings changed or the model was retrained since the run (the
+  optimisation settings do not count).
+
+### Optimisation
+
+- Part of a simulation (`config.optimisation`; result columns from migration 7). Manipulable inputs
+  and their bounds are chosen **per simulation** for now (default bounds: the measured range), not
+  as a project-wide variable classification yet.
+- Decision variables: a fixed input's value, or the value at each of a setpoint input's setpoints
+  (times fixed); max 60. Other inputs keep their profiles.
+- Cost (sidecar `optimisation.py`): sum over outputs with a goal of weight x (minimise: m,
+  maximise: -m, target: (m - target)^2) with m = mean over the simulation or value at the end, scaled
+  by the output's measured range. Output limits (min/max at all times) add 1000 x the scaled worst
+  violation (an exact penalty, so optima sit on a limit, not past it; met = violation <= 1e-4).
+- Solver: scipy `differential_evolution` (seed 0, starts from the current setpoints, L-BFGS-B
+  polish), stopped by a time budget (default 30 s). The result holds the optimised profiles,
+  objective values before/after, and baseline and optimised runs for the comparison plots.
+  "Apply optimised setpoints and run" copies the manipulable inputs' profiles into the setpoints.
+- Simulator evaluations are ~1 ms for an 8 h run at 1-minute steps with a small MLP.
 
 
 ### Adding a feature end to end
@@ -325,7 +345,8 @@ or the sidecar must be killed.
 - Plots: several plot sheets, x-axis zoom shared across plots, relations to other tables
   (e.g. QC results per batch), model predictions for measured batches.
 - Simulation: starting from a measured batch's state/history, comparing several scenarios in one
-  plot, optimisation of manipulable inputs within bounds.
+  plot. Optimisation: optimising setpoint times, rate-of-change limits on inputs, a project-wide
+  manipulable/bounds classification (Variables tool), progress and cancel.
 
 ## Open decisions
 

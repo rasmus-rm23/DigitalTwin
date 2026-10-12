@@ -115,6 +115,15 @@ const MIGRATIONS: &[&str] = &[
         updated_at           TEXT NOT NULL
     );
     "#,
+    // 7: optimisation of a simulation's manipulable inputs. Like `result`, the optimisation result
+    //    records the config and model training time it was computed with.
+    r#"
+    ALTER TABLE simulation ADD COLUMN optimisation TEXT;
+    ALTER TABLE simulation ADD COLUMN optimisation_config TEXT;
+    ALTER TABLE simulation ADD COLUMN optimisation_model_trained_at TEXT;
+    ALTER TABLE simulation ADD COLUMN optimisation_error TEXT;
+    ALTER TABLE simulation ADD COLUMN optimised_at TEXT;
+    "#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {

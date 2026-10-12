@@ -247,3 +247,12 @@ pub async fn simulation_run(state: State<'_, AppState>, id: i64) -> AppResult<Si
     let outcome = call_sidecar(&state, "simulate", request);
     with_project(&state, |p| simulations::store_run(&p.conn, id, &config, &trained_at, outcome))
 }
+
+/// Optimises the manipulable inputs in the sidecar without holding the project lock.
+/// Validation errors are returned as errors; sidecar failures are stored on the simulation.
+#[tauri::command]
+pub async fn simulation_optimise(state: State<'_, AppState>, id: i64) -> AppResult<Simulation> {
+    let (config, trained_at, request) = with_project(&state, |p| simulations::optimise_request(&p.conn, id))?;
+    let outcome = call_sidecar(&state, "optimise", request);
+    with_project(&state, |p| simulations::store_optimisation(&p.conn, id, &config, &trained_at, outcome))
+}

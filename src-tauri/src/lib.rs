@@ -49,6 +49,7 @@ pub fn run() {
             commands::simulation_save,
             commands::simulation_delete,
             commands::simulation_run,
+            commands::simulation_optimise,
             commands::sidecar_ping,
         ])
         .run(tauri::generate_context!())

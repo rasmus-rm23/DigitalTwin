@@ -50,88 +50,118 @@ def profile_values(profile: dict[str, Any], hours: np.ndarray) -> np.ndarray:
     return out
 
 
-def simulate(params: dict[str, Any]) -> dict[str, Any]:
-    artifact = pickle.loads(base64.b64decode(params["artifact"]))
-    if artifact.get("version") != 2:
-        raise ValueError("the model was trained with an older version; retrain it")
-    names = {int(k): v for k, v in params.get("names", {}).items()}
-    duration_min = float(params["durationH"]) * 60.0
-    step = float(params["stepMin"])
-    if not (duration_min > 0 and step > 0):
-        raise ValueError("simulation time and step must be positive")
-    if duration_min / step > MAX_STEPS:
-        raise ValueError(f"too many time steps (max {MAX_STEPS}); increase the step")
+class Simulator:
+    """A trained model on a fixed time grid; `outputs` evaluates input profiles cheaply."""
 
-    inputs = [int(i) for i in artifact["inputs"]]
-    profiles = {int(k): v for k, v in params["profiles"].items()}
-    missing = [names.get(i, str(i)) for i in inputs if i not in profiles]
-    if missing:
-        raise ValueError(f"set a value or setpoints for {', '.join(missing)}")
-    dyn = artifact["dynamics"]
-    feature_inputs = {
-        int(o): [int(i) for i in used] for o, used in artifact["featureInputs"].items()
-    }
+    def __init__(self, params: dict[str, Any]):
+        artifact = pickle.loads(base64.b64decode(params["artifact"]))
+        if artifact.get("version") != 2:
+            raise ValueError("the model was trained with an older version; retrain it")
+        self.names = {int(k): v for k, v in params.get("names", {}).items()}
+        duration_min = float(params["durationH"]) * 60.0
+        step = float(params["stepMin"])
+        if not (duration_min > 0 and step > 0):
+            raise ValueError("simulation time and step must be positive")
+        if duration_min / step > MAX_STEPS:
+            raise ValueError(f"too many time steps (max {MAX_STEPS}); increase the step")
 
-    # Inputs are sampled from before t = 0 (held) to after the end, so that every window fits.
-    pairs = [dyn[f"{i}->{o}"] for o, used in feature_inputs.items() for i in used]
-    before = max((d["delayMin"] + WINDOW_SIGMAS * d["sigmaMin"] for d in pairs), default=0.0)
-    after = max((WINDOW_SIGMAS * d["sigmaMin"] for d in pairs), default=0.0)
-    out_minutes = np.arange(0.0, duration_min + step / 2, step)
-    in_minutes = np.arange(
-        -np.ceil(before / step) * step - step, duration_min + after + 2 * step, step
-    )
-    in_hours = np.maximum(in_minutes, 0.0) / 60.0  # held at the t = 0 value before the start
-    trajectories = {i: profile_values(profiles[i], in_hours) for i in inputs}
+        self.inputs = [int(i) for i in artifact["inputs"]]
+        self.models = {int(o): m for o, m in artifact["models"].items()}
+        self.dyn = artifact["dynamics"]
+        self.feature_inputs = {
+            int(o): [int(i) for i in used] for o, used in artifact["featureInputs"].items()
+        }
+        self.ranges = {
+            int(k): (float(v[0]), float(v[1]))
+            for k, v in params.get("ranges", {}).items()
+            if v and v[0] is not None and v[1] is not None
+        }
 
-    warnings = []
-    for i in inputs:
-        rng = params.get("ranges", {}).get(str(i))
-        if rng and rng[0] is not None and rng[1] is not None:
-            lo, hi = float(rng[0]), float(rng[1])
-            x = trajectories[i]
+        # Inputs are sampled from before t = 0 (held) to after the end, so every window fits.
+        pairs = [self.dyn[f"{i}->{o}"] for o, used in self.feature_inputs.items() for i in used]
+        before = max((d["delayMin"] + WINDOW_SIGMAS * d["sigmaMin"] for d in pairs), default=0.0)
+        after = max((WINDOW_SIGMAS * d["sigmaMin"] for d in pairs), default=0.0)
+        self.out_minutes = np.arange(0.0, duration_min + step / 2, step)
+        self.in_minutes = np.arange(
+            -np.ceil(before / step) * step - step, duration_min + after + 2 * step, step
+        )
+        self.in_hours = np.maximum(self.in_minutes, 0.0) / 60.0  # held at t = 0 before the start
+        self.out_hours = self.out_minutes / 60.0
+
+    def name(self, col: int) -> str:
+        return self.names.get(col, str(col))
+
+    def check_profiles(self, profiles: dict[int, dict[str, Any]]) -> None:
+        missing = [self.name(i) for i in self.inputs if i not in profiles]
+        if missing:
+            raise ValueError(f"set a value or setpoints for {', '.join(missing)}")
+
+    def outputs(self, profiles: dict[int, dict[str, Any]]) -> dict[int, np.ndarray]:
+        """Predicted output values on the output grid (NaN where undefined)."""
+        traj = {i: profile_values(profiles[i], self.in_hours) for i in self.inputs}
+        out = {}
+        for o, model in self.models.items():
+            cols = []
+            for i in self.feature_inputs[o]:
+                d = self.dyn[f"{i}->{o}"]
+                cols.append(
+                    delayed_smoothed(
+                        self.in_minutes, traj[i], self.out_minutes, d["delayMin"], d["sigmaMin"]
+                    )
+                )
+            X = np.column_stack(cols)
+            values = np.full(self.out_minutes.size, np.nan)
+            ok = np.all(np.isfinite(X), axis=1)
+            if ok.any():
+                values[ok] = model.predict(X[ok])
+            out[o] = values
+        return out
+
+    def range_warnings(self, profiles: dict[int, dict[str, Any]]) -> list[str]:
+        warnings = []
+        for i in self.inputs:
+            if i not in self.ranges:
+                continue
+            lo, hi = self.ranges[i]
+            x = profile_values(profiles[i], self.in_hours)
             if x.min() < lo or x.max() > hi:
                 warnings.append(
-                    f"{names.get(i, i)} goes outside the measured range {lo:.4g} to {hi:.4g}; "
+                    f"{self.name(i)} goes outside the measured range {lo:.4g} to {hi:.4g}; "
                     "the model extrapolates there."
                 )
+        return warnings
 
-    outputs = []
-    for o, model in artifact["models"].items():
-        o = int(o)
-        cols = [
-            delayed_smoothed(
-                in_minutes,
-                trajectories[i],
-                out_minutes,
-                dyn[f"{i}->{o}"]["delayMin"],
-                dyn[f"{i}->{o}"]["sigmaMin"],
-            )
-            for i in feature_inputs[o]
-        ]
-        X = np.column_stack(cols)
-        values = np.full(out_minutes.size, np.nan)
-        ok = np.all(np.isfinite(X), axis=1)
-        if ok.any():
-            values[ok] = model.predict(X[ok])
-        outputs.append(
-            {
-                "column": o,
-                "name": names.get(o, str(o)),
-                "values": [None if not np.isfinite(v) else float(v) for v in values],
-            }
-        )
+    def result(self, profiles: dict[int, dict[str, Any]]) -> dict[str, Any]:
+        """The JSON result of one run: time axis, input trajectories, predicted outputs."""
+        outputs = self.outputs(profiles)
+        return {
+            "hours": self.out_hours.tolist(),
+            "inputs": [
+                {
+                    "column": i,
+                    "name": self.name(i),
+                    "values": profile_values(profiles[i], self.out_hours).tolist(),
+                }
+                for i in self.inputs
+            ],
+            "outputs": [
+                {"column": o, "name": self.name(o), "values": _json_values(v)}
+                for o, v in outputs.items()
+            ],
+            "warnings": self.range_warnings(profiles),
+        }
 
-    out_hours = out_minutes / 60.0
-    return {
-        "hours": out_hours.tolist(),
-        "inputs": [
-            {
-                "column": i,
-                "name": names.get(i, str(i)),
-                "values": profile_values(profiles[i], out_hours).tolist(),
-            }
-            for i in inputs
-        ],
-        "outputs": outputs,
-        "warnings": warnings,
-    }
+
+def _json_values(values: np.ndarray) -> list[float | None]:
+    return [None if not np.isfinite(v) else float(v) for v in values]
+
+
+def parse_profiles(raw: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    return {int(k): v for k, v in raw.items()}
+
+
+def simulate(params: dict[str, Any]) -> dict[str, Any]:
+    sim = Simulator(params)
+    profiles = parse_profiles(params["profiles"])
+    sim.check_profiles(profiles)
+    return sim.result(profiles)

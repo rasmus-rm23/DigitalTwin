@@ -319,6 +319,50 @@ export interface SimulationConfig {
   durationH: number;
   stepMin: number;
   inputs: InputProfile[];
+  optimisation: OptimisationSettings;
+}
+
+/** An input the optimiser may change, within its bounds. */
+export interface ManipulableInput {
+  column: number;
+  min: number;
+  max: number;
+}
+
+export type Goal = "minimise" | "maximise" | "target";
+
+/** One output in the optimisation: a goal in the cost function and/or limits (null = none). */
+export interface OutputGoal {
+  column: number;
+  goal: Goal | null;
+  target: number;
+  weight: number;
+  /** Mean over the simulation, or the value at its end. */
+  measure: "mean" | "end";
+  min: number | null;
+  max: number | null;
+}
+
+export interface OptimisationSettings {
+  manipulable: ManipulableInput[];
+  outputs: OutputGoal[];
+  /** Time budget in seconds (1-600). */
+  maxSeconds: number;
+}
+
+export interface OptimisationResult {
+  /** Optimised profiles of all inputs, keyed by column. */
+  profiles: Record<string, InputProfile>;
+  baselineCost: number;
+  cost: number;
+  limitsMet: boolean;
+  baselineLimitsMet: boolean;
+  objectives: { column: number; name: string; measure: "mean" | "end"; baseline: number; value: number }[];
+  evaluations: number;
+  seconds: number;
+  baseline: SimulationResult;
+  optimised: SimulationResult;
+  warnings: string[];
 }
 
 /** A model variable with its measured range in the source table. */
@@ -365,8 +409,13 @@ export interface Simulation {
   result: SimulationResult | null;
   error: string | null;
   runAt: string | null;
-  /** Settings or model changed since the stored result was computed. */
+  /** Settings or model changed since the stored result was computed (optimisation settings excluded). */
   stale: boolean;
+  optimisation: OptimisationResult | null;
+  optimisationError: string | null;
+  optimisedAt: string | null;
+  /** Settings (including setpoints) or model changed since the optimisation. */
+  optimisationStale: boolean;
 }
 
 /** File extension for project files (SQLite inside). */
@@ -414,6 +463,8 @@ export const backend = {
   simulationDelete: (id: number) => invoke<void>("simulation_delete", { id }),
   /** Runs in the Python sidecar; a failed run comes back with `error` set. */
   simulationRun: (id: number) => invoke<Simulation>("simulation_run", { id }),
+  /** Optimises the manipulable inputs in the sidecar; a failed run comes back with `optimisationError`. */
+  simulationOptimise: (id: number) => invoke<Simulation>("simulation_optimise", { id }),
   sidecarPing: () => invoke<SidecarPing>("sidecar_ping"),
 };
 

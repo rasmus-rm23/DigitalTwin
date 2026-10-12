@@ -1105,3 +1105,15 @@ input.out-of-range {
 .sim-input label.inline input.num {
   width: 100px;
 }
+.opt-table {
+  margin: 8px 0;
+}
+.opt-table input.num {
+  width: 80px;
+}
+.opt-table td.num {
+  text-align: right;
+}
+.ok {
+  color: #89d185;
+}

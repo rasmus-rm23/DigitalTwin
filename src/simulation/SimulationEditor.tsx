@@ -13,6 +13,7 @@ import {
 } from "../api/backend";
 import { NumberField, Step } from "../models/ModelEditor";
 import PlotChart from "../plots/PlotChart";
+import OptimisePanel from "./OptimisePanel";
 
 const SAVE_DELAY_MS = 500;
 const X_LABEL = "Time since simulation start (h)";
@@ -60,11 +61,13 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
 
   // --- Autosave (debounced); the core's answer brings the model's inputs and staleness ---
   const lastSaved = useRef(JSON.stringify({ name: initial.name, config: initial.config }));
-  const save = useCallback(async () => {
-    const json = JSON.stringify({ name, config });
+  /** Saves the current settings, or `next` when given (state may not have caught up yet). */
+  const save = useCallback(async (next?: SimulationConfig) => {
+    const cfg = next ?? config;
+    const json = JSON.stringify({ name, config: cfg });
     if (json === lastSaved.current || !name.trim()) return;
     try {
-      const s = await backend.simulationSave(sim.id, name, config);
+      const s = await backend.simulationSave(sim.id, name, cfg);
       lastSaved.current = json;
       setSim(s);
       onChanged(s);
@@ -75,7 +78,7 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
   }, [name, config, sim.id, onChanged]);
 
   useEffect(() => {
-    const t = setTimeout(save, SAVE_DELAY_MS);
+    const t = setTimeout(() => save(), SAVE_DELAY_MS);
     return () => clearTimeout(t);
   }, [save]);
 
@@ -100,11 +103,11 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
   // --- Run ---
   const pointsMissing = config.inputs.some((p) => p.mode === "points" && p.points.length === 0);
   const ready = !!model?.trained && config.inputs.length === modelInputs.length && !pointsMissing;
-  async function run() {
+  async function run(next?: SimulationConfig) {
     setRunning(true);
     setRunError(null);
     try {
-      await save();
+      await save(next);
       const s = await backend.simulationRun(sim.id);
       setSim(s);
       onChanged(s);
@@ -113,6 +116,38 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
     } finally {
       setRunning(false);
     }
+  }
+
+  // --- Optimise ---
+  const [optimising, setOptimising] = useState(false);
+  async function optimise() {
+    setOptimising(true);
+    setRunError(null);
+    try {
+      await save();
+      const s = await backend.simulationOptimise(sim.id);
+      setSim(s);
+      onChanged(s);
+    } catch (e) {
+      setRunError(errorMessage(e));
+    } finally {
+      setOptimising(false);
+    }
+  }
+  /** Copies the optimised values of the manipulable inputs into the setpoints, then runs. */
+  function applyOptimised() {
+    const opt = sim.optimisation;
+    if (!opt) return;
+    const manipulable = new Set(config.optimisation.manipulable.map((m) => m.column));
+    const next = {
+      ...config,
+      inputs: config.inputs.map((p) => {
+        const o = opt.profiles[String(p.column)];
+        return manipulable.has(p.column) && o ? { ...o, column: p.column } : p;
+      }),
+    };
+    setConfig(next);
+    void run(next);
   }
 
   return (
@@ -197,7 +232,7 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
 
       <Step n={4} title="Run" done={!!sim.result && !sim.stale}>
         <div className="model-row">
-          <button className="primary" disabled={!ready || running} onClick={run}>
+          <button className="primary" disabled={!ready || running} onClick={() => run()}>
             {running ? "Running…" : sim.result ? "Run again" : "Run simulation"}
           </button>
           {!ready && <span className="muted">Choose a trained model and give every setpoint input at least one point.</span>}
@@ -207,6 +242,27 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
         {runError && <p className="error">{runError}</p>}
         {sim.error && <p className="error">Simulation failed: {sim.error}</p>}
         {sim.result && <SimulationResults result={sim.result} />}
+      </Step>
+
+      <Step n={5} title="Optimise manipulable inputs" done={!!sim.optimisation && !sim.optimisationStale}>
+        {!model?.trained ? (
+          <p className="muted">Choose a trained model first.</p>
+        ) : (
+          <OptimisePanel
+            model={model}
+            settings={config.optimisation}
+            profiles={config.inputs}
+            onChange={(fn) => update((c) => ({ ...c, optimisation: fn(c.optimisation) }))}
+            canRun={ready}
+            running={optimising}
+            onOptimise={optimise}
+            onApply={applyOptimised}
+            result={sim.optimisation}
+            error={sim.optimisationError}
+            optimisedAt={sim.optimisedAt}
+            stale={sim.optimisationStale}
+          />
+        )}
       </Step>
     </div>
   );

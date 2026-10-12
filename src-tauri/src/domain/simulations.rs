@@ -1,9 +1,11 @@
 //! What-if simulations: a trained model, a simulation time and one setpoint profile per model
-//! input (a fixed value, or setpoints at given times, linearly interpolated).
+//! input (a fixed value, or setpoints at given times, linearly interpolated), plus optimisation
+//! of the manipulable inputs within bounds against a cost function on the outputs.
 //!
-//! The simulation itself runs in the sidecar (`simulate` method, `sidecar/.../simulation.py`).
-//! The core assembles the request with `run_request`, calls the sidecar without holding the
-//! project lock, and stores the response with `store_run`.
+//! Simulation and optimisation run in the sidecar (`simulate` / `optimise`, see
+//! `sidecar/.../simulation.py` and `optimisation.py`). The core assembles the request
+//! (`run_request` / `optimise_request`), calls the sidecar without holding the project lock,
+//! and stores the response (`store_run` / `store_optimisation`).
 
 use std::collections::HashSet;
 
@@ -65,6 +67,83 @@ pub struct SimulationConfig {
     pub step_min: f64,
     #[serde(default)]
     pub inputs: Vec<InputProfile>,
+    #[serde(default)]
+    pub optimisation: OptimisationSettings,
+}
+
+/// An input the optimiser may change, with its bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManipulableInput {
+    pub column: i64,
+    pub min: f64,
+    pub max: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Goal {
+    Minimise,
+    Maximise,
+    /// Bring the measure as close as possible to `target`.
+    Target,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum Measure {
+    /// Mean over the simulation time.
+    #[default]
+    Mean,
+    /// Value at the end of the simulation.
+    End,
+}
+
+/// What the optimiser should do with one output: a goal (part of the cost function) and/or limits.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputGoal {
+    pub column: i64,
+    /// `None`: not part of the cost function (limits still apply).
+    #[serde(default)]
+    pub goal: Option<Goal>,
+    #[serde(default)]
+    pub target: f64,
+    #[serde(default = "default_weight")]
+    pub weight: f64,
+    #[serde(default)]
+    pub measure: Measure,
+    /// The output must stay at or above this value at all times.
+    #[serde(default)]
+    pub min: Option<f64>,
+    /// The output must stay at or below this value at all times.
+    #[serde(default)]
+    pub max: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptimisationSettings {
+    #[serde(default)]
+    pub manipulable: Vec<ManipulableInput>,
+    #[serde(default)]
+    pub outputs: Vec<OutputGoal>,
+    /// Time budget for the optimiser.
+    #[serde(default = "default_max_seconds")]
+    pub max_seconds: f64,
+}
+
+impl Default for OptimisationSettings {
+    fn default() -> Self {
+        Self { manipulable: Vec::new(), outputs: Vec::new(), max_seconds: default_max_seconds() }
+    }
+}
+
+fn default_weight() -> f64 {
+    1.0
+}
+fn default_max_seconds() -> f64 {
+    30.0
 }
 
 fn default_duration() -> f64 {
@@ -76,7 +155,13 @@ fn default_step() -> f64 {
 
 impl Default for SimulationConfig {
     fn default() -> Self {
-        Self { model_id: None, duration_h: default_duration(), step_min: default_step(), inputs: Vec::new() }
+        Self {
+            model_id: None,
+            duration_h: default_duration(),
+            step_min: default_step(),
+            inputs: Vec::new(),
+            optimisation: OptimisationSettings::default(),
+        }
     }
 }
 
@@ -128,8 +213,16 @@ pub struct Simulation {
     pub result: Option<Json>,
     pub error: Option<String>,
     pub run_at: Option<String>,
-    /// The settings or the model changed since the stored result was computed.
+    /// The settings or the model changed since the stored result was computed
+    /// (optimisation settings do not count).
     pub stale: bool,
+    /// Last optimisation: optimised profiles, objective values before/after, baseline and
+    /// optimised runs (see sidecar `optimisation.py`).
+    pub optimisation: Option<Json>,
+    pub optimisation_error: Option<String>,
+    pub optimised_at: Option<String>,
+    /// Settings (including setpoints) or the model changed since the optimisation.
+    pub optimisation_stale: bool,
 }
 
 pub fn list(conn: &Connection) -> AppResult<Vec<SimulationSummary>> {
@@ -155,16 +248,22 @@ pub fn list(conn: &Connection) -> AppResult<Vec<SimulationSummary>> {
 }
 
 pub fn get(conn: &Connection, id: i64) -> AppResult<Simulation> {
-    type Row = (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
-    let row: Option<Row> = conn
+    let row = conn
         .query_row(
-            "SELECT name, config, result, run_config, run_model_trained_at, error, run_at FROM simulation WHERE id = ?1",
+            "SELECT name, config, result, run_config, run_model_trained_at, error, run_at,
+                    optimisation, optimisation_config, optimisation_model_trained_at, optimisation_error, optimised_at
+             FROM simulation WHERE id = ?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+            |r| {
+                let run: [Option<String>; 5] = [r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?];
+                let opt: [Option<String>; 5] = [r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?];
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, run, opt))
+            },
         )
         .optional()?;
-    let (name, config, result, run_config, run_trained_at, error, run_at) =
+    let (name, config, [result, run_config, run_trained_at, error, run_at], opt) =
         row.ok_or_else(|| AppError::InvalidInput(format!("no simulation with id {id}")))?;
+    let [optimisation, opt_config, opt_trained_at, optimisation_error, optimised_at] = opt;
     let mut config: SimulationConfig = serde_json::from_str(&config).unwrap_or_default();
     let model = match config.model_id {
         Some(mid) => match model_info(conn, mid) {
@@ -178,9 +277,14 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<Simulation> {
         },
         None => None,
     };
-    let run_config: Option<SimulationConfig> = run_config.and_then(|c| serde_json::from_str(&c).ok());
+    let trained_at = model.as_ref().and_then(|m| m.trained_at.clone());
+    let parse = |c: Option<String>| -> Option<SimulationConfig> { c.and_then(|c| serde_json::from_str(&c).ok()) };
+    // A run does not depend on the optimisation settings.
+    let without_opt = |c: &SimulationConfig| SimulationConfig { optimisation: OptimisationSettings::default(), ..c.clone() };
     let stale = result.is_some()
-        && (run_config.as_ref() != Some(&config) || model.as_ref().and_then(|m| m.trained_at.clone()) != run_trained_at);
+        && (parse(run_config).map(|c| without_opt(&c)) != Some(without_opt(&config)) || trained_at != run_trained_at);
+    let optimisation_stale =
+        optimisation.is_some() && (parse(opt_config).as_ref() != Some(&config) || trained_at != opt_trained_at);
     Ok(Simulation {
         id,
         name,
@@ -190,6 +294,10 @@ pub fn get(conn: &Connection, id: i64) -> AppResult<Simulation> {
         error,
         run_at,
         stale,
+        optimisation: optimisation.and_then(|r| serde_json::from_str(&r).ok()),
+        optimisation_error,
+        optimised_at,
+        optimisation_stale,
     })
 }
 
@@ -314,8 +422,43 @@ fn validate(conn: &Connection, c: &SimulationConfig) -> AppResult<()> {
             return invalid("setpoint times must be 0 h or later, and values must be numbers");
         }
     }
+    validate_optimisation(&c.optimisation)?;
     if let Some(mid) = c.model_id {
         models::get(conn, mid)?;
+    }
+    Ok(())
+}
+
+fn validate_optimisation(o: &OptimisationSettings) -> AppResult<()> {
+    let invalid = |m: &str| Err(AppError::InvalidInput(m.to_owned()));
+    let mut seen = HashSet::new();
+    for m in &o.manipulable {
+        if !seen.insert(m.column) {
+            return invalid("an input is listed twice as manipulable");
+        }
+        if !(m.min.is_finite() && m.max.is_finite() && m.min < m.max) {
+            return invalid("input bounds: the lower bound must be below the upper bound");
+        }
+    }
+    let mut seen = HashSet::new();
+    for g in &o.outputs {
+        if !seen.insert(g.column) {
+            return invalid("an output is listed twice in the optimisation");
+        }
+        if !(g.weight.is_finite() && g.weight >= 0.0 && g.target.is_finite()) {
+            return invalid("weights must be 0 or positive and targets must be numbers");
+        }
+        if g.min.is_some_and(|v| !v.is_finite()) || g.max.is_some_and(|v| !v.is_finite()) {
+            return invalid("output limits must be numbers");
+        }
+        if let (Some(lo), Some(hi)) = (g.min, g.max) {
+            if lo > hi {
+                return invalid("output limits: the lower limit must not be above the upper limit");
+            }
+        }
+    }
+    if !(1.0..=600.0).contains(&o.max_seconds) {
+        return invalid("the optimisation time limit must be 1-600 s");
     }
     Ok(())
 }
@@ -356,6 +499,82 @@ pub fn run_request(conn: &Connection, id: i64) -> AppResult<(SimulationConfig, S
         "ranges": ranges,
     });
     Ok((c, trained.trained_at, request))
+}
+
+/// Validates the optimisation settings and assembles the sidecar `optimise` request: the
+/// `simulate` request plus manipulable inputs with bounds, objectives, output limits and the
+/// outputs' measured ranges (to scale the cost terms).
+pub fn optimise_request(conn: &Connection, id: i64) -> AppResult<(SimulationConfig, String, Json)> {
+    let (c, trained_at, mut request) = run_request(conn, id)?;
+    let info = get(conn, id)?.model.expect("checked by run_request");
+    let o = &c.optimisation;
+    let is_input = |col: i64| info.inputs.iter().any(|v| v.column == col);
+    let is_output = |col: i64| info.outputs.iter().any(|v| v.column == col);
+
+    let manipulable: Vec<&ManipulableInput> = o.manipulable.iter().filter(|m| is_input(m.column)).collect();
+    if manipulable.is_empty() {
+        return Err(AppError::InvalidInput("mark at least one input as manipulable".into()));
+    }
+    let goals: Vec<&OutputGoal> = o.outputs.iter().filter(|g| is_output(g.column)).collect();
+    if !goals.iter().any(|g| g.goal.is_some()) {
+        return Err(AppError::InvalidInput(
+            "give at least one output a goal (minimise, maximise or target)".into(),
+        ));
+    }
+    let objectives: Vec<Json> = goals
+        .iter()
+        .filter_map(|g| {
+            g.goal.map(|goal| {
+                json!({ "column": g.column, "goal": goal, "target": g.target, "weight": g.weight, "measure": g.measure })
+            })
+        })
+        .collect();
+    let limits: Vec<Json> = goals
+        .iter()
+        .filter(|g| g.min.is_some() || g.max.is_some())
+        .map(|g| json!({ "column": g.column, "min": g.min, "max": g.max }))
+        .collect();
+    let scales: serde_json::Map<String, Json> = info
+        .outputs
+        .iter()
+        .map(|v| {
+            let range = match (v.min, v.max) {
+                (Some(lo), Some(hi)) if hi > lo => hi - lo,
+                _ => 1.0,
+            };
+            (v.column.to_string(), json!(range))
+        })
+        .collect();
+    let r = request.as_object_mut().expect("object");
+    r.insert("manipulable".into(), json!(manipulable));
+    r.insert("objectives".into(), json!(objectives));
+    r.insert("limits".into(), json!(limits));
+    r.insert("scales".into(), json!(scales));
+    r.insert("maxSeconds".into(), json!(o.max_seconds));
+    Ok((c, trained_at, request))
+}
+
+/// Stores the outcome of an optimisation. A failed run keeps the previous result.
+pub fn store_optimisation(
+    conn: &Connection,
+    id: i64,
+    config: &SimulationConfig,
+    model_trained_at: &str,
+    outcome: AppResult<Json>,
+) -> AppResult<Simulation> {
+    match outcome {
+        Ok(result) => {
+            conn.execute(
+                "UPDATE simulation SET optimisation = ?1, optimisation_config = ?2, optimisation_model_trained_at = ?3,
+                 optimisation_error = NULL, optimised_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?4",
+                params![result.to_string(), serde_json::to_string(config)?, model_trained_at, id],
+            )?;
+        }
+        Err(e) => {
+            conn.execute("UPDATE simulation SET optimisation_error = ?1 WHERE id = ?2", params![e.to_string(), id])?;
+        }
+    }
+    get(conn, id)
 }
 
 /// Stores the outcome of a run. A failed run keeps the previous result and records the error.
@@ -525,5 +744,68 @@ mod tests {
         let orphan = get(&p.conn, s.id).unwrap();
         assert_eq!(orphan.config.model_id, None);
         assert!(orphan.model.is_none());
+    }
+    #[test]
+    fn optimise_request_lists_bounds_goals_limits_and_scales() {
+        let dir = tempfile::tempdir().unwrap();
+        let (p, model_id, config) = setup(dir.path());
+        train(&p, model_id, &config);
+        let s = create(&p.conn, "S").unwrap();
+        let mut c = s.config.clone();
+        save(&p.conn, s.id, "S", &c).unwrap();
+        assert!(optimise_request(&p.conn, s.id).unwrap_err().to_string().contains("manipulable"));
+
+        c.optimisation.manipulable = vec![ManipulableInput { column: 2, min: 0.0, max: 20.0 }];
+        save(&p.conn, s.id, "S", &c).unwrap();
+        assert!(optimise_request(&p.conn, s.id).unwrap_err().to_string().contains("goal"));
+
+        c.optimisation.outputs = vec![OutputGoal {
+            column: 4,
+            goal: Some(Goal::Minimise),
+            target: 0.0,
+            weight: 2.0,
+            measure: Measure::End,
+            min: None,
+            max: Some(50.0),
+        }];
+        save(&p.conn, s.id, "S", &c).unwrap();
+        let (_, _, req) = optimise_request(&p.conn, s.id).unwrap();
+        assert_eq!(req["manipulable"], json!([{ "column": 2, "min": 0.0, "max": 20.0 }]));
+        assert_eq!(req["objectives"][0]["goal"], "minimise");
+        assert_eq!(req["objectives"][0]["measure"], "end");
+        assert_eq!(req["objectives"][0]["weight"], json!(2.0));
+        assert_eq!(req["limits"], json!([{ "column": 4, "min": null, "max": 50.0 }]));
+        assert_eq!(req["scales"]["4"], json!(87.0), "y = 3 m for m = 0..29");
+        assert_eq!(req["maxSeconds"], json!(30.0));
+        assert!(req["profiles"]["2"].is_object(), "the simulate request is included");
+
+        let mut bad = c.clone();
+        bad.optimisation.manipulable[0].max = 0.0;
+        assert!(save(&p.conn, s.id, "S", &bad).unwrap_err().to_string().contains("lower bound"));
+        let mut bad = c.clone();
+        bad.optimisation.outputs[0].min = Some(60.0);
+        assert!(save(&p.conn, s.id, "S", &bad).unwrap_err().to_string().contains("lower limit"));
+    }
+
+    #[test]
+    fn optimisation_settings_do_not_make_the_run_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let (p, model_id, config) = setup(dir.path());
+        train(&p, model_id, &config);
+        let s = create(&p.conn, "S").unwrap();
+        let (c, trained_at, _) = run_request(&p.conn, s.id).unwrap();
+        store_run(&p.conn, s.id, &c, &trained_at, Ok(json!({}))).unwrap();
+        let opt = store_optimisation(&p.conn, s.id, &c, &trained_at, Ok(json!({ "cost": 1.0 }))).unwrap();
+        assert!(!opt.stale && !opt.optimisation_stale && opt.optimised_at.is_some());
+        assert_eq!(opt.optimisation.unwrap()["cost"], json!(1.0));
+
+        let mut changed = c.clone();
+        changed.optimisation.max_seconds = 60.0;
+        let s2 = save(&p.conn, s.id, "S", &changed).unwrap();
+        assert!(!s2.stale, "the run does not depend on optimisation settings");
+        assert!(s2.optimisation_stale);
+
+        let failed = store_optimisation(&p.conn, s.id, &changed, &trained_at, Err(AppError::Sidecar("x".into()))).unwrap();
+        assert!(failed.optimisation_error.is_some() && failed.optimisation.is_some(), "previous result kept");
     }
 }
