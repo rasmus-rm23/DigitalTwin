@@ -16,6 +16,16 @@ import PlotChart from "../plots/PlotChart";
 import OptimisePanel from "./OptimisePanel";
 
 const SAVE_DELAY_MS = 500;
+const TAB_KEY = "digitaltwin.simulationTab";
+type Tab = "simulate" | "optimise";
+
+function loadTab(): Tab {
+  try {
+    return localStorage.getItem(TAB_KEY) === "optimise" ? "optimise" : "simulate";
+  } catch {
+    return "simulate";
+  }
+}
 const X_LABEL = "Time since simulation start (h)";
 const OUTPUT_COLOR = "#4fc1ff";
 const INPUT_COLOR = "#f2a33a";
@@ -52,6 +62,15 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [models, setModels] = useState<ModelSummary[]>([]);
+  const [tab, setTabState] = useState<Tab>(loadTab);
+  function setTab(t: Tab) {
+    setTabState(t);
+    try {
+      localStorage.setItem(TAB_KEY, t);
+    } catch {
+      // Remembering the tab is a convenience only.
+    }
+  }
 
   useEffect(() => {
     backend.modelsList().then(setModels).catch((e) => setSaveError(errorMessage(e)));
@@ -120,16 +139,17 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
 
   // --- Optimise ---
   const [optimising, setOptimising] = useState(false);
+  const [optimiseError, setOptimiseError] = useState<string | null>(null);
   async function optimise() {
     setOptimising(true);
-    setRunError(null);
+    setOptimiseError(null);
     try {
       await save();
       const s = await backend.simulationOptimise(sim.id);
       setSim(s);
       onChanged(s);
     } catch (e) {
-      setRunError(errorMessage(e));
+      setOptimiseError(errorMessage(e));
     } finally {
       setOptimising(false);
     }
@@ -147,6 +167,7 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
       }),
     };
     setConfig(next);
+    setTab("simulate"); // show the new run
     void run(next);
   }
 
@@ -154,116 +175,135 @@ export default function SimulationEditor({ initial, onChanged }: Props) {
     <div className="model-editor">
       <div className="model-header">
         <input className="model-name" value={name} onChange={(e) => setName(e.target.value)} />
+        <div className="segmented" role="tablist">
+          <button className={tab === "simulate" ? "active" : undefined} onClick={() => setTab("simulate")}>
+            Simulate
+          </button>
+          <button className={tab === "optimise" ? "active" : undefined} onClick={() => setTab("optimise")}>
+            Optimise
+          </button>
+        </div>
         <span className={saveError ? "error" : "muted"}>{saveError ?? ""}</span>
       </div>
 
-      <Step n={1} title="Model" done={!!model?.trained}>
-        <div className="props-row model-row">
-          <label>
-            Model
-            <select
-              value={config.modelId ?? ""}
-              onChange={(e) =>
-                update((c) => ({ ...c, modelId: e.target.value === "" ? null : Number(e.target.value), inputs: [] }))
-              }
-            >
-              <option value="">Choose a model…</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.trainedAt ? "" : " (not trained)"}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {model && !model.trained && <p className="error">This model has not been trained yet. Train it in the Models view.</p>}
-        {model?.modelStale && (
-          <p className="warning">
-            The model's definition changed since it was trained; the trained version is simulated.
-          </p>
-        )}
-        {model?.trained && (
-          <p className="muted">
-            Outputs: {model.outputs.map((o) => o.name).join(", ")}. Trained{" "}
-            {model.trainedAt ? new Date(model.trainedAt).toLocaleString() : ""}.
-          </p>
-        )}
-      </Step>
+      {tab === "simulate" ? (
+        <>
+          <Step n={1} title="Model" done={!!model?.trained}>
+            <div className="props-row model-row">
+              <label>
+                Model
+                <select
+                  value={config.modelId ?? ""}
+                  onChange={(e) =>
+                    update((c) => ({ ...c, modelId: e.target.value === "" ? null : Number(e.target.value), inputs: [] }))
+                  }
+                >
+                  <option value="">Choose a model…</option>
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                      {m.trainedAt ? "" : " (not trained)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {model && !model.trained && <p className="error">This model has not been trained yet. Train it in the Models view.</p>}
+            {model?.modelStale && (
+              <p className="warning">
+                The model's definition changed since it was trained; the trained version is simulated.
+              </p>
+            )}
+            {model?.trained && (
+              <p className="muted">
+                Outputs: {model.outputs.map((o) => o.name).join(", ")}. Trained{" "}
+                {model.trainedAt ? new Date(model.trainedAt).toLocaleString() : ""}.
+              </p>
+            )}
+          </Step>
 
-      <Step n={2} title="Simulation time" done>
-        <div className="props-row model-row">
-          <label>
-            Duration (h)
-            <NumberField value={config.durationH} onChange={(durationH) => durationH > 0 && update((c) => ({ ...c, durationH }))} />
-          </label>
-          <label title="Time between simulated points">
-            Time step (min)
-            <NumberField value={config.stepMin} onChange={(stepMin) => stepMin > 0 && update((c) => ({ ...c, stepMin }))} />
-          </label>
-        </div>
-      </Step>
+          <Step n={2} title="Simulation time" done>
+            <div className="props-row model-row">
+              <label>
+                Duration (h)
+                <NumberField value={config.durationH} onChange={(durationH) => durationH > 0 && update((c) => ({ ...c, durationH }))} />
+              </label>
+              <label title="Time between simulated points">
+                Time step (min)
+                <NumberField value={config.stepMin} onChange={(stepMin) => stepMin > 0 && update((c) => ({ ...c, stepMin }))} />
+              </label>
+            </div>
+          </Step>
 
-      <Step n={3} title="Input setpoints" done={!!model && config.inputs.length > 0 && !pointsMissing}>
-        {!model ? (
-          <p className="muted">Choose a model first.</p>
-        ) : (
-          <>
+          <Step n={3} title="Input setpoints" done={!!model && config.inputs.length > 0 && !pointsMissing}>
+            {!model ? (
+              <p className="muted">Choose a model first.</p>
+            ) : (
+              <>
+                <p className="muted">
+                  Each input is either fixed, or follows setpoints at given times: linear in between, held before the first
+                  and after the last. Two setpoints at the same time give a step. Before t = 0 the inputs are held at their
+                  t = 0 value.
+                </p>
+                {modelInputs.map((v) => {
+                  const p = config.inputs.find((x) => x.column === v.column);
+                  return p ? (
+                    <InputEditor
+                      key={v.column}
+                      variable={v}
+                      profile={p}
+                      durationH={config.durationH}
+                      onChange={(patch) => setProfile(v.column, patch)}
+                    />
+                  ) : null;
+                })}
+              </>
+            )}
+          </Step>
+
+          <Step n={4} title="Run" done={!!sim.result && !sim.stale}>
+            <div className="model-row">
+              <button className="primary" disabled={!ready || running} onClick={() => run()}>
+                {running ? "Running…" : sim.result ? "Run again" : "Run simulation"}
+              </button>
+              {!ready && <span className="muted">Choose a trained model and give every setpoint input at least one point.</span>}
+              {sim.runAt && <span className="muted">Last run {new Date(sim.runAt).toLocaleString()}</span>}
+              {sim.stale && <span className="warning">Settings or model changed since the last run.</span>}
+            </div>
+            {runError && <p className="error">{runError}</p>}
+            {sim.error && <p className="error">Simulation failed: {sim.error}</p>}
+            {sim.result && <SimulationResults result={sim.result} />}
+          </Step>
+        </>
+      ) : (
+        <Step n={1} title="Optimise manipulable inputs" done={!!sim.optimisation && !sim.optimisationStale}>
+          {!model?.trained ? (
+            <p className="muted">Choose a trained model in the Simulate tab first.</p>
+          ) : !ready ? (
             <p className="muted">
-              Each input is either fixed, or follows setpoints at given times: linear in between, held before the first
-              and after the last. Two setpoints at the same time give a step. Before t = 0 the inputs are held at their
-              t = 0 value.
+              Complete the simulation settings in the Simulate tab first; the optimiser starts from those setpoints.
             </p>
-            {modelInputs.map((v) => {
-              const p = config.inputs.find((x) => x.column === v.column);
-              return p ? (
-                <InputEditor
-                  key={v.column}
-                  variable={v}
-                  profile={p}
-                  durationH={config.durationH}
-                  onChange={(patch) => setProfile(v.column, patch)}
-                />
-              ) : null;
-            })}
-          </>
-        )}
-      </Step>
-
-      <Step n={4} title="Run" done={!!sim.result && !sim.stale}>
-        <div className="model-row">
-          <button className="primary" disabled={!ready || running} onClick={() => run()}>
-            {running ? "Running…" : sim.result ? "Run again" : "Run simulation"}
-          </button>
-          {!ready && <span className="muted">Choose a trained model and give every setpoint input at least one point.</span>}
-          {sim.runAt && <span className="muted">Last run {new Date(sim.runAt).toLocaleString()}</span>}
-          {sim.stale && <span className="warning">Settings or model changed since the last run.</span>}
-        </div>
-        {runError && <p className="error">{runError}</p>}
-        {sim.error && <p className="error">Simulation failed: {sim.error}</p>}
-        {sim.result && <SimulationResults result={sim.result} />}
-      </Step>
-
-      <Step n={5} title="Optimise manipulable inputs" done={!!sim.optimisation && !sim.optimisationStale}>
-        {!model?.trained ? (
-          <p className="muted">Choose a trained model first.</p>
-        ) : (
-          <OptimisePanel
-            model={model}
-            settings={config.optimisation}
-            profiles={config.inputs}
-            onChange={(fn) => update((c) => ({ ...c, optimisation: fn(c.optimisation) }))}
-            canRun={ready}
-            running={optimising}
-            onOptimise={optimise}
-            onApply={applyOptimised}
-            result={sim.optimisation}
-            error={sim.optimisationError}
-            optimisedAt={sim.optimisedAt}
-            stale={sim.optimisationStale}
-          />
-        )}
-      </Step>
+          ) : (
+            <>
+              {optimiseError && <p className="error">{optimiseError}</p>}
+              <OptimisePanel
+                model={model}
+                settings={config.optimisation}
+                profiles={config.inputs}
+                onChange={(fn) => update((c) => ({ ...c, optimisation: fn(c.optimisation) }))}
+                canRun={ready}
+                running={optimising}
+                onOptimise={optimise}
+                onApply={applyOptimised}
+                result={sim.optimisation}
+                error={sim.optimisationError}
+                optimisedAt={sim.optimisedAt}
+                stale={sim.optimisationStale}
+              />
+            </>
+          )}
+        </Step>
+      )}
     </div>
   );
 }

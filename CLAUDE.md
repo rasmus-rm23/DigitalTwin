@@ -128,7 +128,8 @@ src/                    React frontend
   models/                 Models view: ModelsView (list), ModelEditor (5 steps), ModelResults,
                           ModelBatchesPanel (right-panel tab)
   simulation/             Simulation view: SimulationView (list), SimulationEditor (model, time,
-                          input setpoint profiles, run, result plots), OptimisePanel (step 5)
+                          input setpoint profiles, run, result plots), OptimisePanel (Optimise tab;
+                          Simulate/Optimise tab choice in local storage)
   plots/                  Plots view: PlotsView (sheet, data loading, cards), PlotChart (uPlot),
                           BatchesPanel / PlotSettingsPanel (right-panel tabs), data.ts (batch merge)
   pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
