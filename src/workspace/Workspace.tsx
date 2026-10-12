@@ -159,7 +159,7 @@ export default function Workspace({ project, onProjectChange }: Props) {
         { label: "New Project…", onClick: () => switchProject(createProjectWithDialog) },
         { label: "Open Project…", onClick: () => switchProject(openProjectWithDialog) },
         { label: "", separator: true },
-        { label: "Import Data�", onClick: startImport },
+        { label: "Import Data…", onClick: startImport },
         { label: "", separator: true },
         { label: "Close Project", onClick: closeProject },
       ],
