@@ -66,6 +66,10 @@ React UI  ──Tauri commands/events──▶  Rust core  ──JSON-RPC over s
   on every change, keyed by project path). See `workspace/session.ts`. This is per-user view
   state in the webview's local storage, not in the project file. File → Close Project clears
   "last project", so the next start shows the start screen.
+- Right tool windows (Properties, Batches, Plot) show content published by the **active** main-area
+  tab through `workspace/inspector.ts` (keyed by its dockview panel id, e.g. "plots"). Tabs the
+  active view does not fill are hidden; Jobs is always shown. Views republish on every render, so
+  the workspace only re-renders when the set of filled slots changes.
 - Panels restored from a saved layout only get ids as params (e.g. `{ tableId }`); views look up
   current data from `WorkspaceContext`, never from stored params.
 - Use an established docking library (e.g. dockview) instead of a custom docking system.
@@ -121,7 +125,8 @@ src/                    React frontend
   start/                  start screen (new/open project)
   import/                 ImportDialog (preview + column settings)
   tables/                 TableView (virtualized, paged grid), ColumnTypeDialog
-  models/                 Models view: ModelsView (list), ModelEditor (6 steps), ModelResults
+  models/                 Models view: ModelsView (list), ModelEditor (5 steps), ModelResults,
+                          ModelBatchesPanel (right-panel tab)
   plots/                  Plots view: PlotsView (sheet, data loading, cards), PlotChart (uPlot),
                           BatchesPanel / PlotSettingsPanel (right-panel tabs), data.ts (batch merge)
   pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
@@ -225,6 +230,8 @@ Project files use the extension `.dtwin` (a SQLite database inside).
 - One scikit-learn model per output (each output has its own feature set), wrapped in input and
   target standardisation. Linear = OLS (coefficients reported in original units); neural
   network = `MLPRegressor` (hidden layers, activation, alpha, max iterations).
+- The right-panel "Batches" tab (`ModelBatchesPanel`) holds the training batches, the test share and
+  the batch shown in the results plots (view state only, defaults to the first trained batch).
 - Validation: the last `testFraction` (default 20 %) of every selected batch's duration is test
   data. Results: R2 / RMSE train and test per output, measured vs predicted series (thinned to
   2000 points per batch), linear coefficients, warnings (e.g. no convergence).

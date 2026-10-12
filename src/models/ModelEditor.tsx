@@ -11,10 +11,14 @@ import {
   TableInfo,
 } from "../api/backend";
 import { defaultSource } from "../plots/BatchesPanel";
+import { clearInspector, setInspector } from "../workspace/inspector";
 import { useWorkspace } from "../workspace/WorkspaceContext";
+import ModelBatchesPanel from "./ModelBatchesPanel";
 import ModelResults from "./ModelResults";
 
 const SAVE_DELAY_MS = 500;
+/** Inspector owner: the Models view's dockview panel id. */
+const OWNER = "models";
 
 type Role = "none" | "input" | "output";
 
@@ -82,7 +86,7 @@ function syncDynamics(c: ModelConfig): Dynamics[] {
 }
 
 export default function ModelEditor({ initial, onChanged }: Props) {
-  const { tables } = useWorkspace();
+  const { tables, showTool } = useWorkspace();
   const [model, setModel] = useState(initial);
   const [name, setName] = useState(initial.name);
   const [config, setConfig] = useState(initial.config);
@@ -189,6 +193,32 @@ export default function ModelEditor({ initial, onChanged }: Props) {
     config.outputs.length > 0 &&
     config.batches.length > 0 &&
     unconnectedOutputs.length === 0;
+  // --- Right-panel "Batches" tab: training batches and the batch shown in the results ---
+  const resultBatches = useMemo(() => model.result?.outputs[0]?.series.map((s) => s.batch) ?? [], [model.result]);
+  const [pickedBatch, setPickedBatch] = useState<string | null>(null);
+  const shownBatch = pickedBatch !== null && resultBatches.includes(pickedBatch) ? pickedBatch : (resultBatches[0] ?? null);
+  useEffect(() => {
+    setInspector("batches", {
+      owner: OWNER,
+      title: "Batches",
+      render: () => (
+        <ModelBatchesPanel
+          hasSource={!!source}
+          batches={batches}
+          batchError={batchError}
+          selected={config.batches}
+          onSelect={(keys) => update((c) => ({ ...c, batches: keys }))}
+          testFraction={config.testFraction}
+          onTestFraction={(testFraction) => update((c) => ({ ...c, testFraction }))}
+          resultBatches={resultBatches}
+          shownBatch={shownBatch}
+          onShowBatch={setPickedBatch}
+        />
+      ),
+    });
+  });
+  useEffect(() => () => clearInspector("batches", OWNER), []);
+
   async function train() {
     setTraining(true);
     setTrainError(null);
@@ -204,7 +234,6 @@ export default function ModelEditor({ initial, onChanged }: Props) {
     }
   }
 
-  const selectedBatches = new Set(config.batches);
   const pairs = config.inputs.length * config.outputs.length;
 
   return (
@@ -457,65 +486,18 @@ export default function ModelEditor({ initial, onChanged }: Props) {
         )}
       </Step>
 
-      <Step n={5} title="Training batches" done={config.batches.length > 0}>
-        {!source || batchError ? (
-          <p className="muted">Choose the data first.</p>
-        ) : (
-          <>
-            <div className="model-row">
-              <button className="link-button" onClick={() => update((c) => ({ ...c, batches: batches.map((b) => b.key) }))}>
-                All
-              </button>
-              <button className="link-button" onClick={() => update((c) => ({ ...c, batches: [] }))}>
-                None
-              </button>
-              <label className="inline" title="The last part of every selected batch is used to test the model">
-                Test share
-                <input
-                  type="range"
-                  min={0}
-                  max={50}
-                  step={5}
-                  value={Math.round(config.testFraction * 100)}
-                  onChange={(e) => update((c) => ({ ...c, testFraction: Number(e.target.value) / 100 }))}
-                />
-                {Math.round(config.testFraction * 100)} % (end of each batch)
-              </label>
-            </div>
-            <ul className="batch-list model-batches">
-              {batches.map((b) => (
-                <li key={b.key}>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedBatches.has(b.key)}
-                      onChange={() =>
-                        update((c) => {
-                          const next = new Set(c.batches);
-                          if (next.has(b.key)) next.delete(b.key);
-                          else next.add(b.key);
-                          return { ...c, batches: batches.map((x) => x.key).filter((k) => next.has(k)) };
-                        })
-                      }
-                    />
-                    <span className="batch-key">{b.key || "All data"}</span>
-                    <span className="muted">
-                      {((b.endMs - b.startMs) / 3_600_000).toFixed(1)} h · {b.rows.toLocaleString()} rows
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </Step>
-
-      <Step n={6} title="Train" done={model.status === "trained" && !model.stale}>
+      <Step n={5} title="Train" done={model.status === "trained" && !model.stale}>
         <div className="model-row">
           <button className="primary" disabled={!ready || training} onClick={train}>
             {training ? "Training…" : model.status === "trained" ? "Retrain model" : "Train model"}
           </button>
-          {!ready && <span className="muted">Complete steps 1, 2, 3 and 5 to train.</span>}
+          <span className="muted">
+            {config.batches.length} training batch(es){" "}
+            <button className="link-button" onClick={() => showTool("batches")}>
+              choose in Batches
+            </button>
+          </span>
+          {!ready && <span className="muted">Complete steps 1–3 and select training batches to train.</span>}
           {model.trainedAt && (
             <span className="muted">Last trained {new Date(model.trainedAt).toLocaleString()}</span>
           )}
@@ -523,7 +505,7 @@ export default function ModelEditor({ initial, onChanged }: Props) {
         </div>
         {trainError && <p className="error">{trainError}</p>}
         {model.status === "failed" && model.error && <p className="error">Training failed: {model.error}</p>}
-        {model.result && <ModelResults result={model.result} />}
+        {model.result && <ModelResults result={model.result} batch={shownBatch} />}
       </Step>
     </div>
   );

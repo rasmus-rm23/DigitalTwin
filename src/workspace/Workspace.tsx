@@ -6,7 +6,7 @@ import { backend, errorMessage, IMPORT_EXTENSIONS, ImportResult, ProjectInfo, Ta
 import { createProjectWithDialog, openProjectWithDialog } from "../api/projectDialogs";
 import ImportDialog from "../import/ImportDialog";
 import ExplorerTool from "./ExplorerTool";
-import { InspectorSlot, useInspector } from "./inspector";
+import { InspectorSlot, setActiveOwner, useInspector, useInspectorSlots } from "./inspector";
 import * as session from "./session";
 import MenuBar, { Menu } from "./MenuBar";
 import ToolPanel, { ToolPanelState, ToolWindow } from "./ToolPanel";
@@ -19,27 +19,16 @@ interface Props {
 }
 
 /** Shows whatever the active view published for this slot. */
-function InspectorTool({ slot, empty }: { slot: InspectorSlot; empty: string }) {
+function InspectorTool({ slot }: { slot: InspectorSlot }) {
   const content = useInspector(slot);
-  return content ? <>{content.render()}</> : <p className="muted">{empty}</p>;
+  return content ? <>{content.render()}</> : null;
 }
 
-const RIGHT_TOOLS: ToolWindow[] = [
-  {
-    id: "properties",
-    title: "Properties",
-    render: () => <InspectorTool slot="properties" empty="Nothing selected" />,
-  },
-  {
-    id: "batches",
-    title: "Batches",
-    render: () => <InspectorTool slot="batches" empty="Open View → Plots to choose data and batches." />,
-  },
-  {
-    id: "plot",
-    title: "Plot",
-    render: () => <InspectorTool slot="plot" empty="Open View → Plots to edit a plot." />,
-  },
+/** Right tool windows. Those with a slot are only shown while the active view fills it. */
+const RIGHT_TOOLS: (ToolWindow & { slot?: InspectorSlot })[] = [
+  { id: "properties", title: "Properties", slot: "properties", render: () => <InspectorTool slot="properties" /> },
+  { id: "batches", title: "Batches", slot: "batches", render: () => <InspectorTool slot="batches" /> },
+  { id: "plot", title: "Plot", slot: "plot", render: () => <InspectorTool slot="plot" /> },
   { id: "jobs", title: "Jobs", render: () => <p className="muted">Training and optimisation jobs</p> },
 ];
 
@@ -182,8 +171,11 @@ export default function Workspace({ project, onProjectChange }: Props) {
       }
     }
     if (!restored) openView("overview");
+    setActiveOwner(api.activePanel?.id ?? null);
+    api.onDidActivePanelChange((e) => setActiveOwner(e.panel?.id ?? null));
     api.onDidLayoutChange(() => session.saveLayout(project.path, api.toJSON()));
   }
+  useEffect(() => () => setActiveOwner(null), []);
 
   async function switchProject(action: () => Promise<ProjectInfo | null>) {
     try {
@@ -231,7 +223,10 @@ export default function Workspace({ project, onProjectChange }: Props) {
     },
   ];
 
-  const workspaceData: WorkspaceData = { project, tables, tablesLoaded, refreshTables, openTable, showTool };
+  const slots = useInspectorSlots();
+  const rightTools = RIGHT_TOOLS.filter((t) => !t.slot || slots.has(t.slot));
+
+  const workspaceData: WorkspaceData ={ project, tables, tablesLoaded, refreshTables, openTable, showTool };
 
   return (
     <WorkspaceContext.Provider value={workspaceData}>
@@ -255,7 +250,7 @@ export default function Workspace({ project, onProjectChange }: Props) {
           </div>
           <ToolPanel
             side="right"
-            tools={RIGHT_TOOLS}
+            tools={rightTools}
             state={panels.right}
             onChange={(right) => setPanels((p) => ({ ...p, right }))}
           />

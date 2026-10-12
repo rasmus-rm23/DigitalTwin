@@ -1037,14 +1037,6 @@ input.num {
 .dyn-cell input.num {
   width: 52px;
 }
-.model-batches {
-  max-height: 200px;
-}
-.model-batches label.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .model-results {
   margin-top: 10px;
 }
