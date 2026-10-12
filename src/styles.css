@@ -706,3 +706,168 @@ table.grid th button.kind {
 table.grid th button.kind:hover {
   color: #4fc1ff;
 }
+
+/* --- Batches tab --- */
+.batches-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.batch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.batch-list li {
+  display: flex;
+  flex-direction: column;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.batch-list li > .muted {
+  font-size: 11px;
+  padding-left: 22px;
+}
+.batch-key {
+  font-weight: 600;
+}
+
+/* --- Plot tab --- */
+.series-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.series-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.series-list input[type="color"] {
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.series-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.column-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.column-picker-item {
+  padding: 1px 6px;
+  font-size: 12px;
+}
+
+/* --- Plots view --- */
+.plots-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.plots-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.segmented {
+  display: flex;
+}
+.segmented button {
+  border-radius: 0;
+}
+.segmented button + button {
+  border-left: none;
+}
+.segmented button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.plots-height {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.plots-status {
+  margin-left: auto;
+  font-size: 12px;
+}
+.plots-hint {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+}
+.plots-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+}
+.plots-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+}
+.plots-grid.pairs {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.plot-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  padding: 4px 6px 2px;
+  min-width: 0;
+}
+.plot-card.selected {
+  border-color: #4fc1ff;
+}
+.plot-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 2px 4px;
+}
+.plot-card-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+.plots-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px;
+}
+
+/* uPlot in the dark theme */
+.plot-chart .u-legend {
+  font-size: 11px;
+  color: var(--fg);
+}
+.plot-chart .u-legend .u-marker {
+  width: 10px;
+  height: 10px;
+}
+.plot-chart .u-select {
+  background: rgba(79, 193, 255, 0.15);
+}

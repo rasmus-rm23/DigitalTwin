@@ -264,13 +264,13 @@ function PidCanvas() {
   const selectedNodes = nodes.filter((n) => n.selected);
   const selectedEdges = edges.filter((e) => e.selected);
   useEffect(() => {
-    setInspector({
+    setInspector("properties", {
       owner: INSPECTOR_OWNER,
       title: "P&ID",
       render: () => <PidProperties nodes={selectedNodes} edges={selectedEdges} tables={tables} actions={actions} />,
     });
   });
-  useEffect(() => () => clearInspector(INSPECTOR_OWNER), []);
+  useEffect(() => () => clearInspector("properties", INSPECTOR_OWNER), []);
 
   // --- Keyboard: undo/redo and rotate (Delete is handled by React Flow) ---
   useEffect(() => {

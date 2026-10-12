@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::domain::import::{self, ImportOptions, ImportResult, Preview, PreviewSettings};
 use crate::domain::column_type::{self, ColumnConversion, ConversionResult};
 use crate::domain::pid::{self, Diagram};
+use crate::domain::plots::{self, BatchInfo, BatchSeries, PlotSheet, PlotSource};
 use crate::domain::project::{Project, ProjectInfo};
 use crate::domain::tables::{self, TableInfo};
 use crate::error::{AppError, AppResult};
@@ -118,6 +119,32 @@ pub async fn table_convert_column(
     conversion: ColumnConversion,
 ) -> AppResult<ConversionResult> {
     with_project(&state, |p| column_type::convert_column(&mut p.conn, id, ordinal, &conversion))
+}
+
+/// The project's plot sheet (created empty on first call).
+#[tauri::command]
+pub async fn plot_sheet_get(state: State<'_, AppState>) -> AppResult<PlotSheet> {
+    with_project(&state, |p| plots::get_or_create_main(&p.conn))
+}
+
+#[tauri::command]
+pub async fn plot_sheet_save(state: State<'_, AppState>, sheet: PlotSheet) -> AppResult<()> {
+    with_project(&state, |p| plots::save(&p.conn, &sheet))
+}
+
+#[tauri::command]
+pub async fn plot_batches(state: State<'_, AppState>, source: PlotSource) -> AppResult<Vec<BatchInfo>> {
+    with_project(&state, |p| plots::batches(&p.conn, &source))
+}
+
+#[tauri::command]
+pub async fn plot_batch_series(
+    state: State<'_, AppState>,
+    source: PlotSource,
+    batch: String,
+    columns: Vec<i64>,
+) -> AppResult<BatchSeries> {
+    with_project(&state, |p| plots::batch_series(&p.conn, &source, &batch, &columns))
 }
 
 #[tauri::command]

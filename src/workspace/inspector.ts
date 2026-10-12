@@ -1,6 +1,9 @@
-// What the Properties tool window shows. The active editor publishes a render function
-// for its selection; the tool window subscribes and renders it.
+// Content of the right-panel tool windows. The active view publishes a render function per
+// slot (e.g. the P&ID editor fills "properties", the plot view fills "batches" and "plot");
+// each tool window subscribes to its slot and renders it.
 import { ReactNode, useSyncExternalStore } from "react";
+
+export type InspectorSlot = "properties" | "batches" | "plot";
 
 export interface InspectorContent {
   /** Identifies the publisher, so it only clears its own content. */
@@ -9,24 +12,31 @@ export interface InspectorContent {
   render: () => ReactNode;
 }
 
-let current: InspectorContent | null = null;
+const current = new Map<InspectorSlot, InspectorContent>();
 const listeners = new Set<() => void>();
 
-export function setInspector(content: InspectorContent | null) {
-  current = content;
+function notify() {
   listeners.forEach((l) => l());
 }
 
-export function clearInspector(owner: string) {
-  if (current?.owner === owner) setInspector(null);
+export function setInspector(slot: InspectorSlot, content: InspectorContent) {
+  current.set(slot, content);
+  notify();
 }
 
-export function useInspector(): InspectorContent | null {
+export function clearInspector(slot: InspectorSlot, owner: string) {
+  if (current.get(slot)?.owner === owner) {
+    current.delete(slot);
+    notify();
+  }
+}
+
+export function useInspector(slot: InspectorSlot): InspectorContent | null {
   return useSyncExternalStore(
     (l) => {
       listeners.add(l);
       return () => listeners.delete(l);
     },
-    () => current,
+    () => current.get(slot) ?? null,
   );
 }

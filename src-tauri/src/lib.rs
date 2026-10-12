@@ -33,6 +33,10 @@ pub fn run() {
             commands::pid_get,
             commands::pid_save,
             commands::table_convert_column,
+            commands::plot_sheet_get,
+            commands::plot_sheet_save,
+            commands::plot_batches,
+            commands::plot_batch_series,
             commands::sidecar_ping,
         ])
         .run(tauri::generate_context!())

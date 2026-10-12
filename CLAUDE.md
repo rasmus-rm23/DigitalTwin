@@ -121,11 +121,14 @@ src/                    React frontend
   start/                  start screen (new/open project)
   import/                 ImportDialog (preview + column settings)
   tables/                 TableView (virtualized, paged grid), ColumnTypeDialog
+  plots/                  Plots view: PlotsView (sheet, data loading, cards), PlotChart (uPlot),
+                          BatchesPanel / PlotSettingsPanel (right-panel tabs), data.ts (batch merge)
   pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
                           (Diagram <-> React Flow), nodes.tsx, PidEditor.tsx, PidProperties.tsx
   workspace/              shell: MenuBar, ToolPanel (left/right tool windows), ExplorerTool,
                           views.tsx (main-area tabs + dockview component registry),
-                          WorkspaceContext (project, tables), inspector.ts (Properties content),
+                          WorkspaceContext (project, tables, showTool), inspector.ts (right-panel
+                          slots: properties / batches / plot),
                           session.ts (resume state: last/recent projects, tab layouts)
 src-tauri/src/          Rust core
   domain/                 domain logic; db.rs holds the SQLite migrations
@@ -133,6 +136,7 @@ src-tauri/src/          Rust core
                           detection), convert.rs (type inference, number/date parsing, DST)
     tables.rs             catalog + row access for imported tables (all data_<id> SQL lives here)
     pid.rs                P&ID diagrams: load, validate and save
+    plots.rs              plot sheets + batch list and batch-aligned series queries
     column_type.rs        change a column's type in place (keeps table id and column position)
   commands.rs             thin Tauri command wrappers (async, so they stay off the UI thread)
   sidecar.rs              JSON-RPC client for the Python sidecar
@@ -188,6 +192,21 @@ Project files use the extension `.dtwin` (a SQLite database inside).
   position, and therefore P&ID and plot links, stay valid. It also updates the stored import options.
 - Unconvertible values become NULL and are reported. Indexes on the column are dropped first.
 
+### Plots
+
+- Charts use uPlot. One plot sheet per project (`plot_sheet`, config as one JSON document
+  validated by `domain/plots.rs`): source (table, batch column or none, time column), selected
+  batches, layout (stacked / pairs), plot height, simulations flag (disabled until models exist),
+  plots (title, series columns + colours, optional y min/max). Autosaved like the P&ID.
+- `plot_batches` lists batches (creates an index on the batch column); `plot_batch_series` returns
+  one batch's numeric columns with time in hours since the batch's first sample (t = 0).
+- Batches are merged onto one shared, non-decreasing x axis (`plots/data.ts`). Duplicate time
+  stamps within a batch are allowed, so do not use `uPlot.join` (it merges equal x values).
+  Lines span the other batches' null positions; legends show each line's nearest sample.
+- Colour = batch when several batches are shown (dashes then tell columns apart), else the column.
+- The view publishes the right-panel "Batches" and "Plot" tabs via `inspector.ts`; selecting or
+  adding a plot calls `showTool("plot")`.
+
 ### Adding a feature end to end
 
 1. Domain logic in `src-tauri/src/domain/` (plus a migration in `db.rs` if the schema changes).
@@ -238,10 +257,11 @@ or the sidecar must be killed.
 - Sidecar packaging for release builds (`Sidecar::spawn` only handles dev).
 - Long-running sidecar jobs with progress/cancel (the current client is a blocking request/response).
 - Import: cancel, re-import from the stored options, appending to an existing table.
+- Plots: several plot sheets, x-axis zoom shared across plots, relations to other tables
+  (e.g. QC results per batch), model simulation overlay.
 
 ## Open decisions
 
-- Plotting library (e.g. Plotly vs ECharts vs uPlot for large time series).
 - Python sidecar packaging (PyInstaller vs embedded Python distribution) and environment
   management (uv recommended but not installed yet; plain venv + pip works today).
 - MCP transport for the embedded server (stdio via a launcher vs local HTTP/SSE).

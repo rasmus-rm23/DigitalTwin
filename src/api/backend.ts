@@ -159,6 +159,61 @@ export interface ConversionResult {
   warnings: string[];
 }
 
+// --- Plots (mirror of src-tauri/src/domain/plots.rs) ---
+
+/** Columns are zero-based positions in the table. */
+export interface PlotSource {
+  tableId: number;
+  /** null treats the whole table as one batch. */
+  batchColumn: number | null;
+  timeColumn: number;
+}
+
+export interface SeriesDef {
+  column: number;
+  color: string | null;
+}
+
+export interface PlotDef {
+  id: string;
+  title: string;
+  series: SeriesDef[];
+  yMin: number | null;
+  yMax: number | null;
+}
+
+export interface PlotConfig {
+  source: PlotSource | null;
+  selectedBatches: string[];
+  layout: "stacked" | "pairs";
+  /** px per plot, 80-2000. */
+  plotHeight: number;
+  showSimulations: boolean;
+  plots: PlotDef[];
+}
+
+export interface PlotSheet {
+  id: number;
+  name: string;
+  config: PlotConfig;
+}
+
+export interface BatchInfo {
+  /** "" when the source has no batch column. */
+  key: string;
+  startMs: number;
+  endMs: number;
+  rows: number;
+}
+
+/** One batch's samples, time in hours since its first sample. */
+export interface BatchSeries {
+  key: string;
+  hours: number[];
+  /** One array per requested column. */
+  values: (number | null)[][];
+}
+
 /** File extension for project files (SQLite inside). */
 export const PROJECT_EXTENSION = "dtwin";
 
@@ -183,6 +238,11 @@ export const backend = {
   pidSave: (diagram: Diagram) => invoke<void>("pid_save", { diagram }),
   tableConvertColumn: (id: number, ordinal: number, conversion: ColumnConversion) =>
     invoke<ConversionResult>("table_convert_column", { id, ordinal, conversion }),
+  plotSheetGet: () => invoke<PlotSheet>("plot_sheet_get"),
+  plotSheetSave: (sheet: PlotSheet) => invoke<void>("plot_sheet_save", { sheet }),
+  plotBatches: (source: PlotSource) => invoke<BatchInfo[]>("plot_batches", { source }),
+  plotBatchSeries: (source: PlotSource, batch: string, columns: number[]) =>
+    invoke<BatchSeries>("plot_batch_series", { source, batch, columns }),
   sidecarPing: () => invoke<SidecarPing>("sidecar_ping"),
 };
 

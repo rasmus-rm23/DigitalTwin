@@ -21,7 +21,8 @@
     "@xyflow/react": "^12.12.0",
     "dockview-react": "^8.4.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "uplot": "^1.6.32"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

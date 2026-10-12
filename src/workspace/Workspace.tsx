@@ -6,7 +6,7 @@ import { backend, errorMessage, IMPORT_EXTENSIONS, ImportResult, ProjectInfo, Ta
 import { createProjectWithDialog, openProjectWithDialog } from "../api/projectDialogs";
 import ImportDialog from "../import/ImportDialog";
 import ExplorerTool from "./ExplorerTool";
-import { useInspector } from "./inspector";
+import { InspectorSlot, useInspector } from "./inspector";
 import * as session from "./session";
 import MenuBar, { Menu } from "./MenuBar";
 import ToolPanel, { ToolPanelState, ToolWindow } from "./ToolPanel";
@@ -18,14 +18,28 @@ interface Props {
   onProjectChange: (project: ProjectInfo | null) => void;
 }
 
-/** Shows whatever the active editor published for its selection. */
-function PropertiesTool() {
-  const content = useInspector();
-  return content ? <>{content.render()}</> : <p className="muted">Nothing selected</p>;
+/** Shows whatever the active view published for this slot. */
+function InspectorTool({ slot, empty }: { slot: InspectorSlot; empty: string }) {
+  const content = useInspector(slot);
+  return content ? <>{content.render()}</> : <p className="muted">{empty}</p>;
 }
 
 const RIGHT_TOOLS: ToolWindow[] = [
-  { id: "properties", title: "Properties", render: () => <PropertiesTool /> },
+  {
+    id: "properties",
+    title: "Properties",
+    render: () => <InspectorTool slot="properties" empty="Nothing selected" />,
+  },
+  {
+    id: "batches",
+    title: "Batches",
+    render: () => <InspectorTool slot="batches" empty="Open View → Plots to choose data and batches." />,
+  },
+  {
+    id: "plot",
+    title: "Plot",
+    render: () => <InspectorTool slot="plot" empty="Open View → Plots to edit a plot." />,
+  },
   { id: "jobs", title: "Jobs", render: () => <p className="muted">Training and optimisation jobs</p> },
 ];
 
@@ -185,6 +199,12 @@ export default function Workspace({ project, onProjectChange }: Props) {
     onProjectChange(null);
   }
 
+  /** Brings a tool window to the front, showing and expanding its panel if needed. */
+  const showTool = useCallback((id: string) => {
+    const side = RIGHT_TOOLS.some((t) => t.id === id) ? "right" : "left";
+    setPanels((p) => ({ ...p, [side]: { ...p[side], visible: true, collapsed: false, activeTool: id } }));
+  }, []);
+
   const togglePanel = (side: "left" | "right") =>
     setPanels((p) => ({ ...p, [side]: { ...p[side], visible: !p[side].visible } }));
 
@@ -211,7 +231,7 @@ export default function Workspace({ project, onProjectChange }: Props) {
     },
   ];
 
-  const workspaceData: WorkspaceData = { project, tables, tablesLoaded, refreshTables, openTable };
+  const workspaceData: WorkspaceData = { project, tables, tablesLoaded, refreshTables, openTable, showTool };
 
   return (
     <WorkspaceContext.Provider value={workspaceData}>

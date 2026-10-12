@@ -74,6 +74,16 @@ const MIGRATIONS: &[&str] = &[
         FOREIGN KEY (diagram_id, target_id) REFERENCES pid_element(diagram_id, id) ON DELETE CASCADE
     );
     "#,
+    // 4: plot sheets. The sheet configuration (source, batches, plots) is one JSON document,
+    //    validated by `domain::plots`.
+    r#"
+    CREATE TABLE plot_sheet (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT NOT NULL,
+        config     TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    "#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {

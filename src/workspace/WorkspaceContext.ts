@@ -9,6 +9,8 @@ export interface WorkspaceData {
   tablesLoaded: boolean;
   refreshTables: () => void;
   openTable: (table: TableInfo) => void;
+  /** Brings a tool window (e.g. "plot", "batches") to the front. */
+  showTool: (id: string) => void;
 }
 
 export const WorkspaceContext = createContext<WorkspaceData | null>(null);
