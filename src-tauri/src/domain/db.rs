@@ -84,6 +84,22 @@ const MIGRATIONS: &[&str] = &[
         updated_at TEXT NOT NULL
     );
     "#,
+    // 5: ML models. `config` is the editable definition; `trained_config` is the definition the
+    //    stored result/artifact were trained with. `artifact` is the base64 pickled model.
+    r#"
+    CREATE TABLE model (
+        id             INTEGER PRIMARY KEY,
+        name           TEXT NOT NULL,
+        config         TEXT NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'trained', 'failed')),
+        trained_config TEXT,
+        result         TEXT,
+        artifact       TEXT,
+        error          TEXT,
+        trained_at     TEXT,
+        updated_at     TEXT NOT NULL
+    );
+    "#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {

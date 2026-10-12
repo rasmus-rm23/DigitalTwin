@@ -4,6 +4,7 @@
 pub mod column_type;
 pub mod db;
 pub mod import;
+pub mod models;
 pub mod pid;
 pub mod plots;
 pub mod project;

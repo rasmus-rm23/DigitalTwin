@@ -68,6 +68,13 @@ impl Sidecar {
     }
 }
 
+impl Sidecar {
+    /// False once the Python process has exited.
+    pub fn is_alive(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None))
+    }
+}
+
 impl Drop for Sidecar {
     fn drop(&mut self) {
         let _ = self.child.kill();

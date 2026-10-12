@@ -1,6 +1,7 @@
 import { IDockviewPanelProps } from "dockview-react";
 import { FunctionComponent, useState } from "react";
 import { backend, errorMessage } from "../api/backend";
+import ModelsView from "../models/ModelsView";
 import PidEditor from "../pid/PidEditor";
 import PlotsView from "../plots/PlotsView";
 import TableView from "../tables/TableView";
@@ -54,7 +55,7 @@ export const VIEWS: ViewDef[] = [
   { id: "relations", title: "Relations", component: () => <Placeholder text="Tabular model: relations between tables" /> },
   { id: "pid", title: "P&ID", component: PidEditor },
   { id: "plots", title: "Plots", component: PlotsView },
-  { id: "models", title: "Models", component: () => <Placeholder text="ML models and training" /> },
+  { id: "models", title: "Models", component: ModelsView },
   { id: "simulation", title: "Simulation", component: () => <Placeholder text="What-if scenarios and optimisation" /> },
 ];
 

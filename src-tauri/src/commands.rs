@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::domain::import::{self, ImportOptions, ImportResult, Preview, PreviewSettings};
 use crate::domain::column_type::{self, ColumnConversion, ConversionResult};
+use crate::domain::models::{self, Model, ModelConfig, ModelSummary};
 use crate::domain::pid::{self, Diagram};
 use crate::domain::plots::{self, BatchInfo, BatchSeries, PlotSheet, PlotSource};
 use crate::domain::project::{Project, ProjectInfo};
@@ -149,14 +150,60 @@ pub async fn plot_batch_series(
 
 #[tauri::command]
 pub async fn sidecar_ping(state: State<'_, AppState>) -> AppResult<Value> {
+    call_sidecar(&state, "ping", Value::Null)
+}
+
+/// Calls the Python sidecar, starting it on first use. A sidecar whose process died is
+/// dropped so the next call restarts it; ordinary method errors keep it running.
+fn call_sidecar(state: &State<'_, AppState>, method: &str, params: Value) -> AppResult<Value> {
     let mut guard = state.sidecar.lock().unwrap();
     if guard.is_none() {
         *guard = Some(Sidecar::spawn()?);
     }
-    let result = guard.as_mut().unwrap().call("ping", Value::Null);
-    if matches!(result, Err(AppError::Sidecar(_)) | Err(AppError::Io(_))) {
-        // Drop a broken sidecar so the next call restarts it.
+    let sidecar = guard.as_mut().unwrap();
+    let result = sidecar.call(method, params);
+    if result.is_err() && !sidecar.is_alive() {
         *guard = None;
     }
     result
+}
+
+#[tauri::command]
+pub async fn models_list(state: State<'_, AppState>) -> AppResult<Vec<ModelSummary>> {
+    with_project(&state, |p| models::list(&p.conn))
+}
+
+#[tauri::command]
+pub async fn model_get(state: State<'_, AppState>, id: i64) -> AppResult<Model> {
+    with_project(&state, |p| models::get(&p.conn, id))
+}
+
+#[tauri::command]
+pub async fn model_create(state: State<'_, AppState>, name: String) -> AppResult<Model> {
+    with_project(&state, |p| models::create(&p.conn, &name))
+}
+
+#[tauri::command]
+pub async fn model_save(
+    state: State<'_, AppState>,
+    id: i64,
+    name: String,
+    config: ModelConfig,
+) -> AppResult<Model> {
+    with_project(&state, |p| models::save(&p.conn, id, &name, &config))
+}
+
+#[tauri::command]
+pub async fn model_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
+    with_project(&state, |p| models::delete(&p.conn, id))
+}
+
+/// Trains a model in the sidecar. The project is only locked while assembling the data and
+/// storing the result, not during training. Validation errors are returned as errors;
+/// training failures are stored on the model (status "failed") and returned with it.
+#[tauri::command]
+pub async fn model_train(state: State<'_, AppState>, id: i64) -> AppResult<Model> {
+    let (config, request) = with_project(&state, |p| models::training_request(&p.conn, id))?;
+    let outcome = call_sidecar(&state, "train", request);
+    with_project(&state, |p| models::store_training(&p.conn, id, &config, outcome))
 }

@@ -37,6 +37,12 @@ pub fn run() {
             commands::plot_sheet_save,
             commands::plot_batches,
             commands::plot_batch_series,
+            commands::models_list,
+            commands::model_get,
+            commands::model_create,
+            commands::model_save,
+            commands::model_delete,
+            commands::model_train,
             commands::sidecar_ping,
         ])
         .run(tauri::generate_context!())

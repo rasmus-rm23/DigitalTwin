@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Data and ML engine for DigitalTwin, driven by the Tauri app over JSON-RPC on stdio"
 requires-python = ">=3.12"
 dependencies = [
-    # Added as features land: pandas, openpyxl, scikit-learn, torch, scipy
+    "numpy>=2.1",
+    "scikit-learn>=1.6",
 ]
 
 [dependency-groups]

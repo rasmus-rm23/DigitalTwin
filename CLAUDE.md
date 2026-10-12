@@ -121,6 +121,7 @@ src/                    React frontend
   start/                  start screen (new/open project)
   import/                 ImportDialog (preview + column settings)
   tables/                 TableView (virtualized, paged grid), ColumnTypeDialog
+  models/                 Models view: ModelsView (list), ModelEditor (6 steps), ModelResults
   plots/                  Plots view: PlotsView (sheet, data loading, cards), PlotChart (uPlot),
                           BatchesPanel / PlotSettingsPanel (right-panel tabs), data.ts (batch merge)
   pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
@@ -138,12 +139,14 @@ src-tauri/src/          Rust core
     pid.rs                P&ID diagrams: load, validate and save
     plots.rs              plot sheets + batch list and batch-aligned series queries
     column_type.rs        change a column's type in place (keeps table id and column position)
+    models.rs             ML model definitions, training-request assembly, stored results
   commands.rs             thin Tauri command wrappers (async, so they stay off the UI thread)
   sidecar.rs              JSON-RPC client for the Python sidecar
   state.rs                AppState: open project + sidecar process
   error.rs                AppError, serialised to the UI as { kind, message }
 sidecar/                Python data/ML engine
-  src/digitaltwin_sidecar/  rpc.py (protocol), methods.py (method registry)
+  src/digitaltwin_sidecar/  rpc.py (protocol), methods.py (method registry), features.py (delay +
+                            Gaussian smoothing), training.py (linear / MLP per output)
   tests/
 ```
 
@@ -207,6 +210,31 @@ Project files use the extension `.dtwin` (a SQLite database inside).
 - The view publishes the right-panel "Batches" and "Plot" tabs via `inspector.ts`; selecting or
   adding a plot calls `showTool("plot")`.
 
+### Models
+
+- A model (`model` table, migration 5) = one source table (batch + time columns), input and output
+  columns, a delay `delayMin` and Gaussian spread `sigmaMin` (minutes) for every input/output
+  pair, an algorithm (linear or neural network) and the training batches.
+- Features: for an output sample at time t, each input is the Gaussian-weighted average of the
+  input centred at t - delay (window +-3 sigma; sigma = 0 means interpolated value at t - delay).
+  Rows whose window does not fit inside the batch are dropped. Duplicate time stamps are averaged
+  before smoothing. See `sidecar/.../features.py`.
+- Each pair has `enabled` (default true). Unticking it ("no effect", e.g. an input downstream of
+  the output in the process) leaves that input out of that output's model. Every output needs at
+  least one connected input (checked in `training_request` and in the sidecar).
+- One scikit-learn model per output (each output has its own feature set), wrapped in input and
+  target standardisation. Linear = OLS (coefficients reported in original units); neural
+  network = `MLPRegressor` (hidden layers, activation, alpha, max iterations).
+- Validation: the last `testFraction` (default 20 %) of every selected batch's duration is test
+  data. Results: R2 / RMSE train and test per output, measured vs predicted series (thinned to
+  2000 points per batch), linear coefficients, warnings (e.g. no convergence).
+- `model_train`: the core builds the request under the project lock (`training_request`),
+  calls the sidecar without it, then stores result + base64 pickled artifact + the trained
+  definition (`store_training`). `stale` = definition changed since training. A failed run keeps
+  the previous result and sets status "failed".
+- Not yet: delay optimisation within an interval, polynomial/categorical pre-treatment, progress
+  and cancel for long trainings, using models for prediction/simulation.
+
 ### Adding a feature end to end
 
 1. Domain logic in `src-tauri/src/domain/` (plus a migration in `db.rs` if the schema changes).
@@ -241,6 +269,9 @@ or the sidecar must be killed.
 - rusqlite 0.40 has no `usize` conversion. Use `i64` for SQL integers.
 - dockview: use the `dockview-react` package (v8 `dockview` is framework-agnostic core only).
 - The sidecar's stdout carries the JSON-RPC stream only. Log to stderr.
+- Sidecar dependencies (numpy, scikit-learn) are in `sidecar/pyproject.toml`; `npm run
+  sidecar:setup` installs them. Python method errors keep the sidecar running; it is only
+  restarted when its process has died (`call_sidecar` in `commands.rs`).
 - CSV is split by our own `split_record` (`import/source.rs`), not the `csv` crate. The crate's
   record line numbers and byte offsets are wrong with CRLF line endings and blank lines, and
   warnings need exact line numbers.
@@ -255,7 +286,8 @@ or the sidecar must be killed.
 
 - MCP server (planned: embedded in the app, wrapping the same domain functions as `commands.rs`).
 - Sidecar packaging for release builds (`Sidecar::spawn` only handles dev).
-- Long-running sidecar jobs with progress/cancel (the current client is a blocking request/response).
+- Long-running sidecar jobs with progress/cancel (the current client is a blocking request/response;
+  training runs synchronously and reports no progress).
 - Import: cancel, re-import from the stored options, appending to an existing table.
 - Plots: several plot sheets, x-axis zoom shared across plots, relations to other tables
   (e.g. QC results per batch), model simulation overlay.

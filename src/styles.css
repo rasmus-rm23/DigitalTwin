@@ -871,3 +871,205 @@ table.grid th button.kind:hover {
 .plot-chart .u-select {
   background: rgba(79, 193, 255, 0.15);
 }
+
+/* --- Models view --- */
+.models-view {
+  height: 100%;
+  display: flex;
+}
+.models-list {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-y: auto;
+}
+.models-list li.active {
+  background: var(--bg-active);
+}
+.models-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+}
+.status-dot.trained {
+  background: #89d185;
+}
+.status-dot.failed {
+  background: var(--error);
+}
+.models-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+.model-editor {
+  max-width: 1100px;
+  padding: 12px 20px 40px;
+}
+.model-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.model-name {
+  font-size: 16px;
+  min-width: 300px;
+}
+.model-step {
+  margin-bottom: 14px;
+  padding: 10px 14px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+.model-step h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  background: var(--bg-active);
+}
+.step-number.done {
+  background: #3a6d3a;
+  color: #fff;
+}
+.model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.model-row > label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.model-row label.inline,
+label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+input.num {
+  width: 64px;
+  text-align: right;
+}
+.warning {
+  color: #f2a33a;
+}
+.segmented.small button {
+  padding: 1px 8px;
+  font-size: 12px;
+}
+.role-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2px 16px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.role-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 4px;
+}
+.role-row.input {
+  box-shadow: inset 3px 0 0 #4fc1ff;
+}
+.role-row.output {
+  box-shadow: inset 3px 0 0 #f2a33a;
+}
+.role-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dyn-scroll {
+  overflow-x: auto;
+  max-height: 420px;
+}
+.dyn-table th,
+.dyn-table td {
+  padding: 4px 8px;
+}
+.dyn-table tbody th {
+  position: sticky;
+  left: 0;
+  background: var(--bg-bar);
+}
+.dyn-cell {
+  display: flex;
+  gap: 8px;
+}
+.dyn-cell label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--fg-muted);
+}
+.dyn-cell input.num {
+  width: 52px;
+}
+.model-batches {
+  max-height: 200px;
+}
+.model-batches label.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.model-results {
+  margin-top: 10px;
+}
+.metrics {
+  margin-bottom: 12px;
+}
+.output-panel {
+  margin-bottom: 14px;
+}
+.output-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.coefficients {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.dyn-table td.unconnected {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(255, 255, 255, 0.03) 6px 12px);
+}
+.dyn-cell {
+  align-items: center;
+  min-height: 24px;
+}

@@ -214,6 +214,86 @@ export interface BatchSeries {
   values: (number | null)[][];
 }
 
+// --- Models (mirror of src-tauri/src/domain/models.rs and sidecar training.py) ---
+
+export interface Algorithm {
+  kind: "linear" | "neuralNetwork";
+  /** Neurons per hidden layer (neural network). */
+  hiddenLayers: number[];
+  activation: "relu" | "tanh" | "logistic";
+  /** L2 regularisation (neural network). */
+  alpha: number;
+  maxIter: number;
+}
+
+/** Delay and Gaussian smoothing (sigma) of one input for one output, in minutes. */
+export interface Dynamics {
+  input: number;
+  output: number;
+  delayMin: number;
+  sigmaMin: number;
+  /** False when the input cannot affect the output (e.g. it is downstream); it is then not used. */
+  enabled: boolean;
+}
+
+export interface ModelConfig {
+  source: PlotSource | null;
+  inputs: number[];
+  outputs: number[];
+  dynamics: Dynamics[];
+  algorithm: Algorithm;
+  batches: string[];
+  /** Share of each batch's duration, at its end, held out for testing (0-0.9). */
+  testFraction: number;
+}
+
+export type ModelStatus = "draft" | "trained" | "failed";
+
+export interface ModelSummary {
+  id: number;
+  name: string;
+  status: ModelStatus;
+  trainedAt: string | null;
+}
+
+export interface OutputSeries {
+  batch: string;
+  hours: number[];
+  measured: number[];
+  predicted: number[];
+  testStartHours: number | null;
+}
+
+export interface OutputResult {
+  column: number;
+  name: string;
+  nTrain: number;
+  nTest: number;
+  r2Train: number | null;
+  r2Test: number | null;
+  rmseTrain: number | null;
+  rmseTest: number | null;
+  coefficients: { intercept: number; slopes: { column: number; name: string; value: number }[] } | null;
+  series: OutputSeries[];
+}
+
+export interface TrainResult {
+  outputs: OutputResult[];
+  warnings: string[];
+}
+
+export interface Model {
+  id: number;
+  name: string;
+  config: ModelConfig;
+  status: ModelStatus;
+  result: TrainResult | null;
+  error: string | null;
+  trainedAt: string | null;
+  /** The definition changed since the stored result was trained. */
+  stale: boolean;
+}
+
 /** File extension for project files (SQLite inside). */
 export const PROJECT_EXTENSION = "dtwin";
 
@@ -241,6 +321,14 @@ export const backend = {
   plotSheetGet: () => invoke<PlotSheet>("plot_sheet_get"),
   plotSheetSave: (sheet: PlotSheet) => invoke<void>("plot_sheet_save", { sheet }),
   plotBatches: (source: PlotSource) => invoke<BatchInfo[]>("plot_batches", { source }),
+  modelsList: () => invoke<ModelSummary[]>("models_list"),
+  modelGet: (id: number) => invoke<Model>("model_get", { id }),
+  modelCreate: (name: string) => invoke<Model>("model_create", { name }),
+  modelSave: (id: number, name: string, config: ModelConfig) =>
+    invoke<Model>("model_save", { id, name, config }),
+  modelDelete: (id: number) => invoke<void>("model_delete", { id }),
+  /** Trains in the Python sidecar; a failed run comes back as status "failed". */
+  modelTrain: (id: number) => invoke<Model>("model_train", { id }),
   plotBatchSeries: (source: PlotSource, batch: string, columns: number[]) =>
     invoke<BatchSeries>("plot_batch_series", { source, batch, columns }),
   sidecarPing: () => invoke<SidecarPing>("sidecar_ping"),
