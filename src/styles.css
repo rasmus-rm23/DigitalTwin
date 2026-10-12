@@ -454,3 +454,181 @@ table.grid th .kind {
   background: transparent !important;
   padding: 3px 4px;
 }
+
+/* --- Properties tool window --- */
+.props {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+.props label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.props-kind {
+  font-weight: 600;
+}
+.props-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* --- P&ID editor --- */
+.pid-editor {
+  height: 100%;
+  display: flex;
+}
+.pid-palette {
+  width: 132px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+}
+.pid-palette-group {
+  margin: 8px 2px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}
+.pid-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 4px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+  cursor: grab;
+}
+.pid-canvas {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.pid-canvas .react-flow {
+  --xy-background-color: var(--bg);
+}
+.pid-toolbar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+.pid-toolbar button {
+  padding: 2px 8px;
+}
+.pid-toolbar span {
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+/* Symbols: outlines in the foreground colour, accent when selected. */
+.pid-symbol {
+  display: block;
+  color: var(--fg);
+  fill: var(--bg);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  overflow: visible;
+}
+.pid-palette .pid-symbol {
+  fill: none;
+  flex-shrink: 0;
+}
+.pid-node {
+  position: relative;
+}
+.pid-node.selected .pid-symbol {
+  color: #4fc1ff;
+}
+.pid-caption {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 3px;
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--bg);
+}
+.pid-caption span {
+  color: var(--fg-muted);
+}
+.pid-connector-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 18px 0 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pid-instrument-letters,
+.pid-instrument-number {
+  fill: var(--fg);
+  stroke: none;
+  text-anchor: middle;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pid-instrument-number {
+  font-size: 10px;
+  font-weight: 400;
+}
+.pid-link-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #89d185;
+}
+.pid-label {
+  padding: 2px 4px;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.pid-label.selected {
+  outline: 1px dashed #4fc1ff;
+}
+
+/* Connection handles: visible on hover/selection only. */
+.pid-canvas .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  min-width: 0;
+  min-height: 0;
+  background: #4fc1ff;
+  border: 1px solid var(--bg);
+  opacity: 0;
+}
+.pid-canvas .react-flow__node:hover .react-flow__handle,
+.pid-canvas .react-flow__node.selected .react-flow__handle,
+.pid-canvas .react-flow__handle.connectingfrom,
+.pid-canvas .react-flow__handle.connectingto {
+  opacity: 1;
+}
+.pid-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #4fc1ff !important;
+}

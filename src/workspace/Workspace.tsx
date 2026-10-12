@@ -6,17 +6,25 @@ import { backend, errorMessage, IMPORT_EXTENSIONS, ImportResult, ProjectInfo, Ta
 import { createProjectWithDialog, openProjectWithDialog } from "../api/projectDialogs";
 import ImportDialog from "../import/ImportDialog";
 import ExplorerTool from "./ExplorerTool";
+import { useInspector } from "./inspector";
 import MenuBar, { Menu } from "./MenuBar";
 import ToolPanel, { ToolPanelState, ToolWindow } from "./ToolPanel";
 import { VIEW_COMPONENTS, VIEWS } from "./views";
+import { WorkspaceContext, WorkspaceData } from "./WorkspaceContext";
 
 interface Props {
   project: ProjectInfo;
   onProjectChange: (project: ProjectInfo | null) => void;
 }
 
+/** Shows whatever the active editor published for its selection. */
+function PropertiesTool() {
+  const content = useInspector();
+  return content ? <>{content.render()}</> : <p className="muted">Nothing selected</p>;
+}
+
 const RIGHT_TOOLS: ToolWindow[] = [
-  { id: "properties", title: "Properties", render: () => <p className="muted">Selection properties</p> },
+  { id: "properties", title: "Properties", render: () => <PropertiesTool /> },
   { id: "jobs", title: "Jobs", render: () => <p className="muted">Training and optimisation jobs</p> },
 ];
 
@@ -40,13 +48,17 @@ export default function Workspace({ project, onProjectChange }: Props) {
   const [panels, setPanels] = useState(loadPanels);
   const [status, setStatus] = useState("");
   const [tables, setTables] = useState<TableInfo[]>([]);
+  const [tablesLoaded, setTablesLoaded] = useState(false);
   const [importPath, setImportPath] = useState<string | null>(null);
   const dockApi = useRef<DockviewApi | null>(null);
 
   const refreshTables = useCallback(() => {
     backend
       .tablesList()
-      .then(setTables)
+      .then((t) => {
+        setTables(t);
+        setTablesLoaded(true);
+      })
       .catch((e) => setStatus(errorMessage(e)));
   }, []);
 
@@ -175,39 +187,43 @@ export default function Workspace({ project, onProjectChange }: Props) {
     },
   ];
 
+  const workspaceData: WorkspaceData = { project, tables, tablesLoaded, refreshTables, openTable };
+
   return (
-    <div className="workspace">
-      <MenuBar menus={menus} />
-      <div className="workspace-body">
-        <ToolPanel
-          side="left"
-          tools={leftTools}
-          state={panels.left}
-          onChange={(left) => setPanels((p) => ({ ...p, left }))}
-        />
-        <div className="workspace-main">
-          {/* Remount the dock when the project changes so views get fresh params. */}
-          <DockviewReact
-            key={project.path}
-            components={VIEW_COMPONENTS}
-            onReady={onReady}
-            theme={themeDark}
+    <WorkspaceContext.Provider value={workspaceData}>
+      <div className="workspace">
+        <MenuBar menus={menus} />
+        <div className="workspace-body">
+          <ToolPanel
+            side="left"
+            tools={leftTools}
+            state={panels.left}
+            onChange={(left) => setPanels((p) => ({ ...p, left }))}
+          />
+          <div className="workspace-main">
+            {/* Remount the dock when the project changes so views get fresh params. */}
+            <DockviewReact
+              key={project.path}
+              components={VIEW_COMPONENTS}
+              onReady={onReady}
+              theme={themeDark}
+            />
+          </div>
+          <ToolPanel
+            side="right"
+            tools={RIGHT_TOOLS}
+            state={panels.right}
+            onChange={(right) => setPanels((p) => ({ ...p, right }))}
           />
         </div>
-        <ToolPanel
-          side="right"
-          tools={RIGHT_TOOLS}
-          state={panels.right}
-          onChange={(right) => setPanels((p) => ({ ...p, right }))}
-        />
+        {importPath && (
+          <ImportDialog path={importPath} onClose={() => setImportPath(null)} onImported={onImported} />
+        )}
+        <div className="statusbar">
+          <span>{project.name}</span>
+          <span className="statusbar-msg">{status}</span>
+        </div>
       </div>
-      {importPath && (
-        <ImportDialog path={importPath} onClose={() => setImportPath(null)} onImported={onImported} />
-      )}
-      <div className="statusbar">
-        <span>{project.name}</span>
-        <span className="statusbar-msg">{status}</span>
-      </div>
-    </div>
+    </WorkspaceContext.Provider>
   );
 }

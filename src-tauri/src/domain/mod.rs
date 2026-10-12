@@ -3,5 +3,6 @@
 
 pub mod db;
 pub mod import;
+pub mod pid;
 pub mod project;
 pub mod tables;

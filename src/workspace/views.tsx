@@ -1,6 +1,7 @@
 import { IDockviewPanelProps } from "dockview-react";
 import { FunctionComponent, useState } from "react";
 import { backend, errorMessage, ProjectInfo } from "../api/backend";
+import PidEditor from "../pid/PidEditor";
 import TableView from "../tables/TableView";
 
 /** Document views that can be opened as tabs in the main area. */
@@ -49,7 +50,7 @@ function OverviewView({ params }: IDockviewPanelProps<{ project: ProjectInfo }>)
 export const VIEWS: ViewDef[] = [
   { id: "overview", title: "Overview", component: OverviewView },
   { id: "relations", title: "Relations", component: () => <Placeholder text="Tabular model: relations between tables" /> },
-  { id: "pid", title: "P&ID", component: () => <Placeholder text="Process & instrumentation diagram" /> },
+  { id: "pid", title: "P&ID", component: PidEditor },
   { id: "plots", title: "Plots", component: () => <Placeholder text="Measured vs. model plots" /> },
   { id: "models", title: "Models", component: () => <Placeholder text="ML models and training" /> },
   { id: "simulation", title: "Simulation", component: () => <Placeholder text="What-if scenarios and optimisation" /> },

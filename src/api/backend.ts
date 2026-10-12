@@ -87,6 +87,60 @@ export interface ImportResult {
 /** Cell value from `tableRows`: datetime columns are epoch ms (UTC). */
 export type CellValue = number | string | null;
 
+// --- P&ID (mirror of src-tauri/src/domain/pid.rs) ---
+
+export type ElementKind =
+  | "column"
+  | "vessel"
+  | "tank"
+  | "pump"
+  | "heat_exchanger"
+  | "valve"
+  | "control_valve"
+  | "instrument"
+  | "connector"
+  | "label";
+
+export type ConnectionKind = "process" | "signal";
+
+/** A data column by table id and zero-based column position. */
+export interface ColumnRef {
+  tableId: number;
+  ordinal: number;
+}
+
+export interface PidElement {
+  id: string;
+  kind: ElementKind;
+  tag: string;
+  label: string;
+  x: number;
+  y: number;
+  /** Displayed (rotated) size. */
+  width: number;
+  height: number;
+  rotation: 0 | 90 | 180 | 270;
+  props: Record<string, unknown>;
+  column: ColumnRef | null;
+}
+
+export interface PidConnection {
+  id: string;
+  kind: ConnectionKind;
+  source: string;
+  sourceHandle: string | null;
+  target: string;
+  targetHandle: string | null;
+  label: string;
+}
+
+export interface Diagram {
+  id: number;
+  name: string;
+  elements: PidElement[];
+  connections: PidConnection[];
+}
+
 /** File extension for project files (SQLite inside). */
 export const PROJECT_EXTENSION = "dtwin";
 
@@ -107,6 +161,8 @@ export const backend = {
   tableRows: (id: number, offset: number, limit: number) =>
     invoke<CellValue[][]>("table_rows", { id, offset, limit }),
   tableDelete: (id: number) => invoke<void>("table_delete", { id }),
+  pidGet: () => invoke<Diagram>("pid_get"),
+  pidSave: (diagram: Diagram) => invoke<void>("pid_save", { diagram }),
   sidecarPing: () => invoke<SidecarPing>("sidecar_ping"),
 };
 

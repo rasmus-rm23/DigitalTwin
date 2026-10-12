@@ -7,6 +7,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::domain::import::{self, ImportOptions, ImportResult, Preview, PreviewSettings};
+use crate::domain::pid::{self, Diagram};
 use crate::domain::project::{Project, ProjectInfo};
 use crate::domain::tables::{self, TableInfo};
 use crate::error::{AppError, AppResult};
@@ -95,6 +96,17 @@ pub async fn table_rows(
 #[tauri::command]
 pub async fn table_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
     with_project(&state, |p| tables::delete(&mut p.conn, id))
+}
+
+/// The project's main P&ID (created empty on first call).
+#[tauri::command]
+pub async fn pid_get(state: State<'_, AppState>) -> AppResult<Diagram> {
+    with_project(&state, |p| pid::get_or_create_main(&p.conn))
+}
+
+#[tauri::command]
+pub async fn pid_save(state: State<'_, AppState>, diagram: Diagram) -> AppResult<()> {
+    with_project(&state, |p| pid::save(&mut p.conn, &diagram))
 }
 
 #[tauri::command]

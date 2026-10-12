@@ -34,6 +34,46 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (table_id, ordinal)
     );
     "#,
+    // 3: P&ID diagrams. Element/connection ids are client-generated strings.
+    //    An element may link to a data column; deleting the table clears the link.
+    r#"
+    CREATE TABLE pid_diagram (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE pid_element (
+        diagram_id     INTEGER NOT NULL REFERENCES pid_diagram(id) ON DELETE CASCADE,
+        id             TEXT NOT NULL,
+        kind           TEXT NOT NULL,
+        tag            TEXT NOT NULL DEFAULT '',
+        label          TEXT NOT NULL DEFAULT '',
+        x              REAL NOT NULL,
+        y              REAL NOT NULL,
+        width          REAL NOT NULL,
+        height         REAL NOT NULL,
+        rotation       INTEGER NOT NULL DEFAULT 0 CHECK (rotation IN (0, 90, 180, 270)),
+        props          TEXT NOT NULL DEFAULT '{}',
+        table_id       INTEGER,
+        column_ordinal INTEGER,
+        PRIMARY KEY (diagram_id, id),
+        FOREIGN KEY (table_id, column_ordinal)
+            REFERENCES data_column(table_id, ordinal) ON DELETE SET NULL
+    );
+    CREATE TABLE pid_connection (
+        diagram_id    INTEGER NOT NULL REFERENCES pid_diagram(id) ON DELETE CASCADE,
+        id            TEXT NOT NULL,
+        kind          TEXT NOT NULL CHECK (kind IN ('process', 'signal')),
+        source_id     TEXT NOT NULL,
+        source_handle TEXT,
+        target_id     TEXT NOT NULL,
+        target_handle TEXT,
+        label         TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (diagram_id, id),
+        FOREIGN KEY (diagram_id, source_id) REFERENCES pid_element(diagram_id, id) ON DELETE CASCADE,
+        FOREIGN KEY (diagram_id, target_id) REFERENCES pid_element(diagram_id, id) ON DELETE CASCADE
+    );
+    "#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {

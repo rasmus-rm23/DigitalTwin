@@ -113,13 +113,17 @@ src/                    React frontend
   start/                  start screen (new/open project)
   import/                 ImportDialog (preview + column settings)
   tables/                 TableView (virtualized, paged grid)
+  pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
+                          (Diagram <-> React Flow), nodes.tsx, PidEditor.tsx, PidProperties.tsx
   workspace/              shell: MenuBar, ToolPanel (left/right tool windows), ExplorerTool,
-                          views.tsx (main-area tabs + dockview component registry)
+                          views.tsx (main-area tabs + dockview component registry),
+                          WorkspaceContext (project, tables), inspector.ts (Properties content)
 src-tauri/src/          Rust core
   domain/                 domain logic; db.rs holds the SQLite migrations
     import/               CSV/spreadsheet import: source.rs (reading, encoding/delimiter
                           detection), convert.rs (type inference, number/date parsing, DST)
     tables.rs             catalog + row access for imported tables (all data_<id> SQL lives here)
+    pid.rs                P&ID diagrams: load, validate and save
   commands.rs             thin Tauri command wrappers (async, so they stay off the UI thread)
   sidecar.rs              JSON-RPC client for the Python sidecar
   state.rs                AppState: open project + sidecar process
@@ -149,6 +153,22 @@ Project files use the extension `.dtwin` (a SQLite database inside).
   skipped spring hour the time is shifted +1 h. Both are counted in the warnings.
 - Throughput: ~1M rows × 6 columns in under 2 s (release). Check with
   `cargo test --release -- --ignored large_import`.
+
+### P&ID
+
+- Built on React Flow (`@xyflow/react`). One diagram per project for now (`pid_get` creates it),
+  but the schema (`pid_diagram`, `pid_element`, `pid_connection`) allows several.
+- The editor autosaves the whole diagram (debounced) with `pid_save`, which validates and replaces
+  all elements and connections in one transaction.
+- Element ids are client-generated strings. `width`/`height` are the displayed size (already
+  swapped for 90°/270° rotation); symbols are drawn unrotated and rotated inside the node.
+- Symbol kinds must match in `ELEMENT_KINDS` (`pid.rs`) and `SYMBOLS` (`symbols.tsx`). A new
+  symbol needs a size, handles (side + position 0..1) and a `draw` function.
+- Lines touching an instrument default to `signal` (dashed), others to `process` (arrow).
+- Instruments link to a data column via `(table_id, column_ordinal)`. The FK clears the link when
+  the table is deleted, and the editor drops links to missing columns before saving.
+- The editor publishes its selection to the Properties tool window through `workspace/inspector.ts`.
+- Undo/redo: whole-diagram snapshots taken before each change (Ctrl+Z, Ctrl+Y; R / Shift+R rotate).
 
 ### Adding a feature end to end
 
@@ -189,6 +209,10 @@ or the sidecar must be killed.
   warnings need exact line numbers.
 - Commands lock the project mutex for their whole run, so a long import blocks other project
   commands until it finishes.
+- The window has `dragDropEnabled: false` (`tauri.conf.json`). Tauri's file drop handling
+  otherwise swallows HTML5 drag-and-drop on Windows, which the P&ID palette uses.
+- System Python defaults to cp1252 here. Scripts that edit repo files must use
+  `encoding="utf-8"` (or Node), or non-ASCII characters get corrupted.
 
 ## Not yet implemented
 
@@ -199,8 +223,7 @@ or the sidecar must be killed.
 
 ## Open decisions
 
-- Specific libraries: plotting (e.g. Plotly vs ECharts vs uPlot for large time series),
-  P&ID editor (e.g. React Flow).
+- Plotting library (e.g. Plotly vs ECharts vs uPlot for large time series).
 - Python sidecar packaging (PyInstaller vs embedded Python distribution) and environment
   management (uv recommended but not installed yet; plain venv + pip works today).
 - MCP transport for the embedded server (stdio via a launcher vs local HTTP/SSE).

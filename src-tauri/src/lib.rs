@@ -20,6 +20,8 @@ pub fn run() {
             commands::tables_list,
             commands::table_rows,
             commands::table_delete,
+            commands::pid_get,
+            commands::pid_save,
             commands::sidecar_ping,
         ])
         .run(tauri::generate_context!())
