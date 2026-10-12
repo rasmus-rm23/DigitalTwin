@@ -7,6 +7,7 @@ import { createProjectWithDialog, openProjectWithDialog } from "../api/projectDi
 import ImportDialog from "../import/ImportDialog";
 import ExplorerTool from "./ExplorerTool";
 import { useInspector } from "./inspector";
+import * as session from "./session";
 import MenuBar, { Menu } from "./MenuBar";
 import ToolPanel, { ToolPanelState, ToolWindow } from "./ToolPanel";
 import { VIEW_COMPONENTS, VIEWS } from "./views";
@@ -81,7 +82,7 @@ export default function Workspace({ project, onProjectChange }: Props) {
       return;
     }
     const view = VIEWS.find((v) => v.id === id)!;
-    api.addPanel({ id, component: id, title: view.title, params: { project } });
+    api.addPanel({ id, component: id, title: view.title });
   }
 
   function openTable(table: TableInfo) {
@@ -93,8 +94,18 @@ export default function Workspace({ project, onProjectChange }: Props) {
       existing.api.setActive();
       return;
     }
-    api.addPanel({ id, component: "table", title: table.name, params: { table } });
+    api.addPanel({ id, component: "table", title: table.name, params: { tableId: table.id } });
   }
+
+  // Tabs restored from the saved layout may point at tables that were deleted since.
+  useEffect(() => {
+    const api = dockApi.current;
+    if (!api || !tablesLoaded) return;
+    for (const panel of api.panels) {
+      const m = panel.id.match(/^table:(\d+)$/);
+      if (m && !tables.some((t) => t.id === Number(m[1]))) panel.api.close();
+    }
+  }, [tables, tablesLoaded]);
 
   async function startImport() {
     const path = await open({
@@ -142,9 +153,22 @@ export default function Workspace({ project, onProjectChange }: Props) {
     { id: "variables", title: "Variables", render: () => <p className="muted">Inputs and outputs</p> },
   ];
 
+  // Restore this project's tabs from the last session and save them on every layout change.
   function onReady(event: DockviewReadyEvent) {
-    dockApi.current = event.api;
-    openView("overview");
+    const api = event.api;
+    dockApi.current = api;
+    const saved = session.loadLayout(project.path);
+    let restored = false;
+    if (saved) {
+      try {
+        api.fromJSON(saved);
+        restored = true;
+      } catch {
+        api.clear(); // unreadable or outdated layout: start fresh
+      }
+    }
+    if (!restored) openView("overview");
+    api.onDidLayoutChange(() => session.saveLayout(project.path, api.toJSON()));
   }
 
   async function switchProject(action: () => Promise<ProjectInfo | null>) {

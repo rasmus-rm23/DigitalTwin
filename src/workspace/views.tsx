@@ -1,8 +1,9 @@
 import { IDockviewPanelProps } from "dockview-react";
 import { FunctionComponent, useState } from "react";
-import { backend, errorMessage, ProjectInfo } from "../api/backend";
+import { backend, errorMessage } from "../api/backend";
 import PidEditor from "../pid/PidEditor";
 import TableView from "../tables/TableView";
+import { useWorkspace } from "./WorkspaceContext";
 
 /** Document views that can be opened as tabs in the main area. */
 export interface ViewDef {
@@ -15,9 +16,9 @@ function Placeholder({ text }: { text: string }) {
   return <div className="view-placeholder">{text}</div>;
 }
 
-function OverviewView({ params }: IDockviewPanelProps<{ project: ProjectInfo }>) {
+function OverviewView() {
   const [engine, setEngine] = useState<string>("not checked");
-  const { project } = params;
+  const { project } = useWorkspace();
 
   async function ping() {
     setEngine("checking…");

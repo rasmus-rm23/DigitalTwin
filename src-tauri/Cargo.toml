@@ -31,6 +31,7 @@ chrono = "0.4.45"
 chrono-tz = "0.10.4"
 encoding_rs = "0.8.35"
 encoding_rs_io = "0.1.8"
+tauri-plugin-window-state = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

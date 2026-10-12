@@ -58,8 +58,16 @@ React UI  ──Tauri commands/events──▶  Rust core  ──JSON-RPC over s
 - **Main area**: tabbed documents (tables, relation model, P&ID, plots, models, simulations).
 - **Left and right tool panels**: each holds tabbed tool windows that can be shown/hidden
   and collapsed/expanded. Persist the layout per user (and optionally per project).
-- **Startup**: a new window shows only a start screen. The user must **create a new project
-  or open an existing one** before the workspace becomes available.
+- **Startup**: if a project was open when the app closed, it is reopened. Otherwise the window
+  shows only a start screen (new, open, recent projects); the user must **create or open a
+  project** before the workspace becomes available.
+- **Resume state**: window size/position/maximised (`tauri-plugin-window-state`, saved on exit),
+  the last open project, recent projects, and each project's open tabs (dockview layout, saved
+  on every change, keyed by project path). See `workspace/session.ts`. This is per-user view
+  state in the webview's local storage, not in the project file. File → Close Project clears
+  "last project", so the next start shows the start screen.
+- Panels restored from a saved layout only get ids as params (e.g. `{ tableId }`); views look up
+  current data from `WorkspaceContext`, never from stored params.
 - Use an established docking library (e.g. dockview) instead of a custom docking system.
 
 ## Domain model and terminology
@@ -117,7 +125,8 @@ src/                    React frontend
                           (Diagram <-> React Flow), nodes.tsx, PidEditor.tsx, PidProperties.tsx
   workspace/              shell: MenuBar, ToolPanel (left/right tool windows), ExplorerTool,
                           views.tsx (main-area tabs + dockview component registry),
-                          WorkspaceContext (project, tables), inspector.ts (Properties content)
+                          WorkspaceContext (project, tables), inspector.ts (Properties content),
+                          session.ts (resume state: last/recent projects, tab layouts)
 src-tauri/src/          Rust core
   domain/                 domain logic; db.rs holds the SQLite migrations
     import/               CSV/spreadsheet import: source.rs (reading, encoding/delimiter

@@ -632,3 +632,32 @@ table.grid th .kind {
 .pid-canvas .react-flow__edge.selected .react-flow__edge-path {
   stroke: #4fc1ff !important;
 }
+
+/* --- Start screen: recent projects --- */
+.start-recent {
+  margin-top: 24px;
+}
+.start-recent-title {
+  margin-bottom: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}
+.start-recent-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+.start-recent-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.start-recent-item .muted {
+  font-size: 11px;
+}

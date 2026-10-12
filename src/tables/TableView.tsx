@@ -1,13 +1,15 @@
 import { IDockviewPanelProps } from "dockview-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backend, CellValue, errorMessage, TableInfo } from "../api/backend";
+import { useWorkspace } from "../workspace/WorkspaceContext";
 
 const ROW_HEIGHT = 22;
 const PAGE_SIZE = 500;
 const OVERSCAN = 20;
 
+/** Only the id is stored in the panel, so restored tabs always show the current table. */
 export interface TableViewParams {
-  table: TableInfo;
+  tableId: number;
 }
 
 const dateFormat = new Intl.DateTimeFormat("sv-SE", {
@@ -26,9 +28,15 @@ function formatCell(value: CellValue, kind: string): string {
   return String(value);
 }
 
-/** Read-only, virtualized grid over an imported table. Rows are fetched in pages. */
 export default function TableView({ params }: IDockviewPanelProps<TableViewParams>) {
-  const { table } = params;
+  const { tables, tablesLoaded } = useWorkspace();
+  const table = tables.find((t) => t.id === params.tableId);
+  if (!table) return <div className="view-placeholder">{tablesLoaded ? "This table no longer exists." : ""}</div>;
+  return <TableGrid key={`${table.id}:${table.importedAt}`} table={table} />;
+}
+
+/** Read-only, virtualized grid over an imported table. Rows are fetched in pages. */
+function TableGrid({ table }: { table: TableInfo }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pages = useRef(new Map<number, CellValue[][]>());
   const loading = useRef(new Set<number>());
