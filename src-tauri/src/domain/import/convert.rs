@@ -35,6 +35,15 @@ pub const DATETIME_FORMATS: &[&str] = &[
     "%d/%m/%Y %H:%M",
     "%m/%d/%Y %H:%M:%S%.f",
     "%m/%d/%Y %H:%M",
+    // Danish/Nordic locale exports use "." between hours, minutes and seconds.
+    "%d-%m-%Y %H.%M.%S",
+    "%d-%m-%Y %H.%M",
+    "%d.%m.%Y %H.%M.%S",
+    "%d.%m.%Y %H.%M",
+    "%d/%m/%Y %H.%M.%S",
+    "%d/%m/%Y %H.%M",
+    "%Y-%m-%d %H.%M.%S",
+    "%Y-%m-%d %H.%M",
     "%Y-%m-%d",
     "%d-%m-%Y",
     "%d.%m.%Y",
@@ -43,16 +52,46 @@ pub const DATETIME_FORMATS: &[&str] = &[
     RFC3339,
 ];
 
-/// Parses a number written with the given decimal separator. The other separator
-/// and spaces are treated as thousands separators. Returns `None` for unparseable text.
+/// Parses a number written with the given decimal separator. The other separator and
+/// spaces are accepted as thousands separators, but only in groups of three digits
+/// (so "1.234,5" works while "31.01.2026" or "1.5" with decimal comma do not).
+/// Returns `None` for unparseable text.
 pub fn parse_number(s: &str, decimal: char) -> Option<f64> {
-    let s: String = s.chars().filter(|c| !c.is_whitespace() && *c != '\u{a0}').collect();
+    let s = s.trim_matches(|c: char| c.is_whitespace() || c == '\u{a0}');
     if s.is_empty() {
         return None;
     }
-    let normalised = match decimal {
-        ',' => s.replace('.', "").replace(',', "."),
-        _ => s.replace(',', ""),
+    let thousands = if decimal == ',' { '.' } else { ',' };
+    let is_group_sep = |c: char| c == thousands || c == ' ' || c == '\u{a0}';
+
+    // Split off sign, exponent and fraction; only the integer part may hold group separators.
+    let (sign, rest) = match s.strip_prefix(['-', '+']) {
+        Some(r) => (&s[..1], r),
+        None => ("", s),
+    };
+    let (mantissa, exponent) = match rest.find(['e', 'E']) {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, ""),
+    };
+    let (int_part, fraction) = match mantissa.split_once(decimal) {
+        Some((i, f)) => (i, Some(f)),
+        None => (mantissa, None),
+    };
+    let int_digits: String = if int_part.contains(is_group_sep) {
+        let groups: Vec<&str> = int_part.split(is_group_sep).collect();
+        let valid = groups.iter().enumerate().all(|(i, g)| {
+            g.chars().all(|c| c.is_ascii_digit()) && if i == 0 { (1..=3).contains(&g.len()) } else { g.len() == 3 }
+        });
+        if !valid {
+            return None;
+        }
+        groups.concat()
+    } else {
+        int_part.to_owned()
+    };
+    let normalised = match fraction {
+        Some(f) => format!("{sign}{int_digits}.{f}{exponent}"),
+        None => format!("{sign}{int_digits}{exponent}"),
     };
     normalised.parse::<f64>().ok().filter(|f| f.is_finite())
 }
@@ -229,6 +268,10 @@ mod tests {
         assert_eq!(parse_number("1 234,5", ','), Some(1234.5));
         assert_eq!(parse_number("1,234.5", '.'), Some(1234.5));
         assert_eq!(parse_number("-2.5E-3", '.'), Some(-0.0025));
+        assert_eq!(parse_number("1.234.567,25", ','), Some(1234567.25));
+        assert_eq!(parse_number("1.5", ','), None, "dot is not a decimal here");
+        assert_eq!(parse_number("31.01.2026 23.59", ','), None);
+        assert_eq!(parse_number("12,34", '.'), None, "comma groups must have 3 digits");
         assert_eq!(parse_number("abc", '.'), None);
         assert_eq!(parse_number("", '.'), None);
     }
@@ -249,6 +292,14 @@ mod tests {
             infer_kind(&[&iso], '.'),
             (ColumnKind::Datetime, Some("%Y-%m-%d %H:%M:%S%.f".into()))
         );
+    }
+
+    #[test]
+    fn dot_time_separator() {
+        let (a, b) = (text("01/01/2026 00.00"), text("31/01/2026 23.59"));
+        assert_eq!(infer_kind(&[&a, &b], '.').1.as_deref(), Some("%d/%m/%Y %H.%M"));
+        let s = text("31.01.2026 23.59.30");
+        assert_eq!(infer_kind(&[&s], ',').1.as_deref(), Some("%d.%m.%Y %H.%M.%S"));
     }
 
     #[test]

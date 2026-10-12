@@ -2,6 +2,7 @@ import { IDockviewPanelProps } from "dockview-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backend, CellValue, errorMessage, TableInfo } from "../api/backend";
 import { useWorkspace } from "../workspace/WorkspaceContext";
+import ColumnTypeDialog from "./ColumnTypeDialog";
 
 const ROW_HEIGHT = 22;
 const PAGE_SIZE = 500;
@@ -32,11 +33,15 @@ export default function TableView({ params }: IDockviewPanelProps<TableViewParam
   const { tables, tablesLoaded } = useWorkspace();
   const table = tables.find((t) => t.id === params.tableId);
   if (!table) return <div className="view-placeholder">{tablesLoaded ? "This table no longer exists." : ""}</div>;
-  return <TableGrid key={`${table.id}:${table.importedAt}`} table={table} />;
+  // Remount (refetch rows) when the table is re-imported or a column changes type.
+  const version = `${table.id}:${table.importedAt}:${table.columns.map((c) => c.kind).join(",")}`;
+  return <TableGrid key={version} table={table} />;
 }
 
 /** Read-only, virtualized grid over an imported table. Rows are fetched in pages. */
 function TableGrid({ table }: { table: TableInfo }) {
+  const { refreshTables } = useWorkspace();
+  const [converting, setConverting] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pages = useRef(new Map<number, CellValue[][]>());
   const loading = useRef(new Set<number>());
@@ -113,7 +118,9 @@ function TableGrid({ table }: { table: TableInfo }) {
               {table.columns.map((c, i) => (
                 <th key={i} title={c.kind}>
                   {c.name}
-                  <span className="kind">{c.kind}</span>
+                  <button className="kind" title="Change column type…" onClick={() => setConverting(i)}>
+                    {c.kind} ▾
+                  </button>
                 </th>
               ))}
             </tr>
@@ -125,6 +132,17 @@ function TableGrid({ table }: { table: TableInfo }) {
           </tbody>
         </table>
       </div>
+      {converting !== null && (
+        <ColumnTypeDialog
+          table={table}
+          ordinal={converting}
+          onClose={() => {
+            setConverting(null);
+            refreshTables();
+          }}
+          onConverted={() => {}}
+        />
+      )}
     </div>
   );
 }

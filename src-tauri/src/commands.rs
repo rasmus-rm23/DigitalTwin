@@ -7,6 +7,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::domain::import::{self, ImportOptions, ImportResult, Preview, PreviewSettings};
+use crate::domain::column_type::{self, ColumnConversion, ConversionResult};
 use crate::domain::pid::{self, Diagram};
 use crate::domain::project::{Project, ProjectInfo};
 use crate::domain::tables::{self, TableInfo};
@@ -107,6 +108,16 @@ pub async fn pid_get(state: State<'_, AppState>) -> AppResult<Diagram> {
 #[tauri::command]
 pub async fn pid_save(state: State<'_, AppState>, diagram: Diagram) -> AppResult<()> {
     with_project(&state, |p| pid::save(&mut p.conn, &diagram))
+}
+
+#[tauri::command]
+pub async fn table_convert_column(
+    state: State<'_, AppState>,
+    id: i64,
+    ordinal: i64,
+    conversion: ColumnConversion,
+) -> AppResult<ConversionResult> {
+    with_project(&state, |p| column_type::convert_column(&mut p.conn, id, ordinal, &conversion))
 }
 
 #[tauri::command]

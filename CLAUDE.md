@@ -120,7 +120,7 @@ src/                    React frontend
   api/backend.ts          typed wrappers for every Tauri command (mirror of commands.rs)
   start/                  start screen (new/open project)
   import/                 ImportDialog (preview + column settings)
-  tables/                 TableView (virtualized, paged grid)
+  tables/                 TableView (virtualized, paged grid), ColumnTypeDialog
   pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
                           (Diagram <-> React Flow), nodes.tsx, PidEditor.tsx, PidProperties.tsx
   workspace/              shell: MenuBar, ToolPanel (left/right tool windows), ExplorerTool,
@@ -133,6 +133,7 @@ src-tauri/src/          Rust core
                           detection), convert.rs (type inference, number/date parsing, DST)
     tables.rs             catalog + row access for imported tables (all data_<id> SQL lives here)
     pid.rs                P&ID diagrams: load, validate and save
+    column_type.rs        change a column's type in place (keeps table id and column position)
   commands.rs             thin Tauri command wrappers (async, so they stay off the UI thread)
   sidecar.rs              JSON-RPC client for the Python sidecar
   state.rs                AppState: open project + sidecar process
@@ -178,6 +179,14 @@ Project files use the extension `.dtwin` (a SQLite database inside).
   the table is deleted, and the editor drops links to missing columns before saving.
 - The editor publishes its selection to the Properties tool window through `workspace/inspector.ts`.
 - Undo/redo: whole-diagram snapshots taken before each change (Ctrl+Z, Ctrl+Y; R / Shift+R rotate).
+
+### Changing column types
+
+- Table view: click the type next to a column name. `table_convert_column` re-parses the values
+  (text -> date/time with a detected or given format and time zone, text <-> number, ...) and
+  rebuilds the SQL column in place (add, fill, drop old, rename), so the table id and column
+  position, and therefore P&ID and plot links, stay valid. It also updates the stored import options.
+- Unconvertible values become NULL and are reported. Indexes on the column are dropped first.
 
 ### Adding a feature end to end
 

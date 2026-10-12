@@ -141,6 +141,24 @@ export interface Diagram {
   connections: PidConnection[];
 }
 
+// --- Column type change (mirror of src-tauri/src/domain/column_type.rs) ---
+
+export interface ColumnConversion {
+  kind: Exclude<ColumnKind, "skip">;
+  /** chrono format or "rfc3339"; null detects it from the values. */
+  datetimeFormat: string | null;
+  timezone: string;
+  decimal: string;
+}
+
+export interface ConversionResult {
+  table: TableInfo;
+  converted: number;
+  invalid: number;
+  datetimeFormat: string | null;
+  warnings: string[];
+}
+
 /** File extension for project files (SQLite inside). */
 export const PROJECT_EXTENSION = "dtwin";
 
@@ -163,6 +181,8 @@ export const backend = {
   tableDelete: (id: number) => invoke<void>("table_delete", { id }),
   pidGet: () => invoke<Diagram>("pid_get"),
   pidSave: (diagram: Diagram) => invoke<void>("pid_save", { diagram }),
+  tableConvertColumn: (id: number, ordinal: number, conversion: ColumnConversion) =>
+    invoke<ConversionResult>("table_convert_column", { id, ordinal, conversion }),
   sidecarPing: () => invoke<SidecarPing>("sidecar_ping"),
 };
 
