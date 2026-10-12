@@ -1065,3 +1065,43 @@ input.num {
   align-items: center;
   min-height: 24px;
 }
+
+.sim-input {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+.sim-input-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.sim-input-header .segmented {
+  margin-left: auto;
+}
+.sim-points {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.sim-points table input.num {
+  width: 80px;
+}
+.sim-points-side {
+  flex: 1;
+  min-width: 0;
+}
+input.out-of-range {
+  border-color: #c69026;
+}
+.sim-input label.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sim-input label.inline input.num {
+  width: 100px;
+}

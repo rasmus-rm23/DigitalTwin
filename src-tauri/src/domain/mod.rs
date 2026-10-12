@@ -8,4 +8,5 @@ pub mod models;
 pub mod pid;
 pub mod plots;
 pub mod project;
+pub mod simulations;
 pub mod tables;

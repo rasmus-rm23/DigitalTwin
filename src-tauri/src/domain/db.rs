@@ -100,6 +100,21 @@ const MIGRATIONS: &[&str] = &[
         updated_at     TEXT NOT NULL
     );
     "#,
+    // 6: simulations (what-if scenarios). `config` holds the model, simulation time and input
+    //    setpoint profiles; `run_config` and `run_model_trained_at` record what `result` was run with.
+    r#"
+    CREATE TABLE simulation (
+        id                   INTEGER PRIMARY KEY,
+        name                 TEXT NOT NULL,
+        config               TEXT NOT NULL,
+        result               TEXT,
+        run_config           TEXT,
+        run_model_trained_at TEXT,
+        error                TEXT,
+        run_at               TEXT,
+        updated_at           TEXT NOT NULL
+    );
+    "#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> AppResult<()> {

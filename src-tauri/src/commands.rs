@@ -12,6 +12,7 @@ use crate::domain::models::{self, Model, ModelConfig, ModelSummary};
 use crate::domain::pid::{self, Diagram};
 use crate::domain::plots::{self, BatchInfo, BatchSeries, PlotSheet, PlotSource};
 use crate::domain::project::{Project, ProjectInfo};
+use crate::domain::simulations::{self, Simulation, SimulationConfig, SimulationSummary};
 use crate::domain::tables::{self, TableInfo};
 use crate::error::{AppError, AppResult};
 use crate::sidecar::Sidecar;
@@ -206,4 +207,43 @@ pub async fn model_train(state: State<'_, AppState>, id: i64) -> AppResult<Model
     let (config, request) = with_project(&state, |p| models::training_request(&p.conn, id))?;
     let outcome = call_sidecar(&state, "train", request);
     with_project(&state, |p| models::store_training(&p.conn, id, &config, outcome))
+}
+
+#[tauri::command]
+pub async fn simulations_list(state: State<'_, AppState>) -> AppResult<Vec<SimulationSummary>> {
+    with_project(&state, |p| simulations::list(&p.conn))
+}
+
+#[tauri::command]
+pub async fn simulation_get(state: State<'_, AppState>, id: i64) -> AppResult<Simulation> {
+    with_project(&state, |p| simulations::get(&p.conn, id))
+}
+
+#[tauri::command]
+pub async fn simulation_create(state: State<'_, AppState>, name: String) -> AppResult<Simulation> {
+    with_project(&state, |p| simulations::create(&p.conn, &name))
+}
+
+#[tauri::command]
+pub async fn simulation_save(
+    state: State<'_, AppState>,
+    id: i64,
+    name: String,
+    config: SimulationConfig,
+) -> AppResult<Simulation> {
+    with_project(&state, |p| simulations::save(&p.conn, id, &name, &config))
+}
+
+#[tauri::command]
+pub async fn simulation_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
+    with_project(&state, |p| simulations::delete(&p.conn, id))
+}
+
+/// Runs a simulation in the sidecar without holding the project lock. Validation errors are
+/// returned as errors; sidecar failures are stored on the simulation and returned with it.
+#[tauri::command]
+pub async fn simulation_run(state: State<'_, AppState>, id: i64) -> AppResult<Simulation> {
+    let (config, trained_at, request) = with_project(&state, |p| simulations::run_request(&p.conn, id))?;
+    let outcome = call_sidecar(&state, "simulate", request);
+    with_project(&state, |p| simulations::store_run(&p.conn, id, &config, &trained_at, outcome))
 }

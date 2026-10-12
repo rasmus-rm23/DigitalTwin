@@ -7,6 +7,7 @@ from typing import Any
 
 from . import __version__
 from .rpc import Handler
+from .simulation import simulate
 from .training import train
 
 
@@ -17,4 +18,5 @@ def ping(_params: Any) -> dict[str, str]:
 METHODS: dict[str, Handler] = {
     "ping": ping,
     "train": train,
+    "simulate": simulate,
 }

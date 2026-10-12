@@ -127,6 +127,8 @@ src/                    React frontend
   tables/                 TableView (virtualized, paged grid), ColumnTypeDialog
   models/                 Models view: ModelsView (list), ModelEditor (5 steps), ModelResults,
                           ModelBatchesPanel (right-panel tab)
+  simulation/             Simulation view: SimulationView (list), SimulationEditor (model, time,
+                          input setpoint profiles, run, result plots)
   plots/                  Plots view: PlotsView (sheet, data loading, cards), PlotChart (uPlot),
                           BatchesPanel / PlotSettingsPanel (right-panel tabs), data.ts (batch merge)
   pid/                    P&ID editor: symbols.tsx (symbol library + handle rotation), model.ts
@@ -145,13 +147,15 @@ src-tauri/src/          Rust core
     plots.rs              plot sheets + batch list and batch-aligned series queries
     column_type.rs        change a column's type in place (keeps table id and column position)
     models.rs             ML model definitions, training-request assembly, stored results
+    simulations.rs        what-if simulations: settings, input profiles, run-request assembly, results
   commands.rs             thin Tauri command wrappers (async, so they stay off the UI thread)
   sidecar.rs              JSON-RPC client for the Python sidecar
   state.rs                AppState: open project + sidecar process
   error.rs                AppError, serialised to the UI as { kind, message }
 sidecar/                Python data/ML engine
   src/digitaltwin_sidecar/  rpc.py (protocol), methods.py (method registry), features.py (delay +
-                            Gaussian smoothing), training.py (linear / MLP per output)
+                            Gaussian smoothing), training.py (linear / MLP per output),
+                            simulation.py (input profiles through a trained model)
   tests/
 ```
 
@@ -240,7 +244,23 @@ Project files use the extension `.dtwin` (a SQLite database inside).
   definition (`store_training`). `stale` = definition changed since training. A failed run keeps
   the previous result and sets status "failed".
 - Not yet: delay optimisation within an interval, polynomial/categorical pre-treatment, progress
-  and cancel for long trainings, using models for prediction/simulation.
+  and cancel for long trainings, predicting batches that were not trained on.
+
+### Simulations
+
+- A simulation (`simulation` table, migration 6) = a model, a duration (h), an output time step
+  (min) and one profile per model input: `fixed` (one value) or `points` (setpoints at hours since
+  start, linear in between, held before the first and after the last; two setpoints at the same
+  time give a step). New simulations use the most recently trained model with every input fixed at
+  its mean in the source table.
+- The **trained** model version is simulated (`models::trained`: trained config + artifact), even
+  if the definition changed since; the editor warns about that.
+- Sidecar `simulate`: inputs are sampled on the step grid from before t = 0 (held at their t = 0
+  value) until after the end, so every delay/smoothing window is defined and the output exists
+  from t = 0. Warns when a profile leaves an input's measured range (extrapolation).
+- `simulation_run` works like `model_train`: `run_request` under the lock, sidecar call without it,
+  `store_run`. `stale` = settings changed or the model was retrained since the run.
+
 
 ### Adding a feature end to end
 
@@ -286,6 +306,8 @@ or the sidecar must be killed.
   commands until it finishes.
 - The window has `dragDropEnabled: false` (`tauri.conf.json`). Tauri's file drop handling
   otherwise swallows HTML5 drag-and-drop on Windows, which the P&ID palette uses.
+- Model artifacts are pickles and `simulate` unpickles them, so running a simulation in a project
+  file from an untrusted source can execute code. Only open project files you trust.
 - System Python defaults to cp1252 here. Scripts that edit repo files must use
   `encoding="utf-8"` (or Node), or non-ASCII characters get corrupted.
 
@@ -298,6 +320,8 @@ or the sidecar must be killed.
 - Import: cancel, re-import from the stored options, appending to an existing table.
 - Plots: several plot sheets, x-axis zoom shared across plots, relations to other tables
   (e.g. QC results per batch), model simulation overlay.
+- Simulation: starting from a measured batch's state/history, comparing several scenarios in one
+  plot, optimisation of manipulable inputs within bounds.
 
 ## Open decisions
 

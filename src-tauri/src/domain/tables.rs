@@ -128,6 +128,13 @@ pub fn rows(conn: &Connection, id: i64, offset: i64, limit: i64) -> AppResult<Ve
     Ok(rows)
 }
 
+/// Minimum, maximum and mean of a numeric column (`None` when it has no values).
+pub fn column_stats(conn: &Connection, id: i64, ordinal: i64) -> AppResult<(Option<f64>, Option<f64>, Option<f64>)> {
+    let c = column_sql_name(ordinal as usize);
+    let sql = format!("SELECT MIN({c}), MAX({c}), AVG({c}) FROM \"{}\"", data_table_name(id));
+    Ok(conn.query_row(&sql, [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?)
+}
+
 pub fn delete(conn: &mut Connection, id: i64) -> AppResult<()> {
     let tx = conn.transaction()?;
     tx.execute(&format!("DROP TABLE IF EXISTS \"{}\"", data_table_name(id)), [])?;

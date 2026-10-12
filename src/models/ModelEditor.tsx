@@ -63,7 +63,7 @@ export function NumberField({ value, onChange, min = 0, title, className }: {
   );
 }
 
-function Step({ n, title, children, done }: { n: number; title: string; children: ReactNode; done: boolean }) {
+export function Step({ n, title, children, done }: { n: number; title: string; children: ReactNode; done: boolean }) {
   return (
     <section className="model-step">
       <h3>

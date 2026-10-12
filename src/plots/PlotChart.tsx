@@ -11,6 +11,8 @@ interface Props {
   yMax: number | null;
   /** Plots with the same key share a crosshair. */
   syncKey: string;
+  /** x-axis label; defaults to time since batch start. */
+  xLabel?: string;
 }
 
 const AXIS = { stroke: "#a0a0a0", grid: { stroke: "#2f2f2f", width: 1 }, ticks: { stroke: "#3c3c3c", width: 1 } };
@@ -33,12 +35,12 @@ function formatValue(v: number | null): string {
 }
 
 /** A uPlot line chart that fills its container's width. */
-export default function PlotChart({ data, lines, height, yMin, yMax, syncKey }: Props) {
+export default function PlotChart({ data, lines, height, yMin, yMax, syncKey, xLabel = "Time since batch start (h)" }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<uPlot | null>(null);
 
   // Recreate the chart when its structure changes; data-only changes go through setData.
-  const structure = JSON.stringify({ lines, yMin, yMax, syncKey });
+  const structure = JSON.stringify({ lines, yMin, yMax, syncKey, xLabel });
   useEffect(() => {
     const el = container.current!;
     const opts: Options = {
@@ -50,13 +52,18 @@ export default function PlotChart({ data, lines, height, yMin, yMax, syncKey }: 
         x: { time: false },
         y: {
           range: (_u, min, max) => {
+            // A constant series (e.g. a fixed setpoint) gets a band around its value.
+            if (min != null && min === max) {
+              const pad = Math.abs(min) * 0.1 || 1;
+              [min, max] = [min - pad, max + pad];
+            }
             const [lo, hi] = uPlot.rangeNum(min ?? 0, max ?? 1, 0.1, true);
             return [yMin ?? lo, yMax ?? hi];
           },
         },
       },
       axes: [
-        { ...AXIS, label: "Time since batch start (h)", labelSize: 20 },
+        { ...AXIS, label: xLabel, labelSize: 20 },
         { ...AXIS, size: 60 },
       ],
       series: [

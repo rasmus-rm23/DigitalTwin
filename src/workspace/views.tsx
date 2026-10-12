@@ -4,6 +4,7 @@ import { backend, errorMessage } from "../api/backend";
 import ModelsView from "../models/ModelsView";
 import PidEditor from "../pid/PidEditor";
 import PlotsView from "../plots/PlotsView";
+import SimulationView from "../simulation/SimulationView";
 import TableView from "../tables/TableView";
 import { useWorkspace } from "./WorkspaceContext";
 
@@ -56,7 +57,7 @@ export const VIEWS: ViewDef[] = [
   { id: "pid", title: "P&ID", component: PidEditor },
   { id: "plots", title: "Plots", component: PlotsView },
   { id: "models", title: "Models", component: ModelsView },
-  { id: "simulation", title: "Simulation", component: () => <Placeholder text="What-if scenarios and optimisation" /> },
+  { id: "simulation", title: "Simulation", component: SimulationView },
 ];
 
 /** Dockview component registry: singleton views plus per-item views like tables. */

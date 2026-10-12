@@ -294,6 +294,77 @@ export interface Model {
   stale: boolean;
 }
 
+// --- Simulations (mirror of src-tauri/src/domain/simulations.rs and sidecar simulation.py) ---
+
+export interface SetPoint {
+  /** Hours since the simulation start. */
+  hours: number;
+  value: number;
+}
+
+/**
+ * "fixed": one value throughout. "points": setpoints at given times, linear in between and held
+ * before the first and after the last; two setpoints at the same time give a step.
+ */
+export interface InputProfile {
+  column: number;
+  mode: "fixed" | "points";
+  value: number;
+  points: SetPoint[];
+}
+
+export interface SimulationConfig {
+  modelId: number | null;
+  durationH: number;
+  stepMin: number;
+  inputs: InputProfile[];
+}
+
+/** A model variable with its measured range in the source table. */
+export interface SimVariable {
+  column: number;
+  name: string;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+}
+
+export interface SimModel {
+  id: number;
+  name: string;
+  trained: boolean;
+  trainedAt: string | null;
+  /** The model definition changed since training; the trained version is simulated. */
+  modelStale: boolean;
+  inputs: SimVariable[];
+  outputs: SimVariable[];
+}
+
+export interface SimulationSummary {
+  id: number;
+  name: string;
+  runAt: string | null;
+}
+
+export interface SimulationResult {
+  hours: number[];
+  inputs: { column: number; name: string; values: number[] }[];
+  outputs: { column: number; name: string; values: (number | null)[] }[];
+  warnings: string[];
+}
+
+export interface Simulation {
+  id: number;
+  name: string;
+  config: SimulationConfig;
+  model: SimModel | null;
+  result: SimulationResult | null;
+  error: string | null;
+  runAt: string | null;
+  /** Settings or model changed since the stored result was computed. */
+  stale: boolean;
+}
+
 /** File extension for project files (SQLite inside). */
 export const PROJECT_EXTENSION = "dtwin";
 
@@ -331,6 +402,14 @@ export const backend = {
   modelTrain: (id: number) => invoke<Model>("model_train", { id }),
   plotBatchSeries: (source: PlotSource, batch: string, columns: number[]) =>
     invoke<BatchSeries>("plot_batch_series", { source, batch, columns }),
+  simulationsList: () => invoke<SimulationSummary[]>("simulations_list"),
+  simulationGet: (id: number) => invoke<Simulation>("simulation_get", { id }),
+  simulationCreate: (name: string) => invoke<Simulation>("simulation_create", { name }),
+  simulationSave: (id: number, name: string, config: SimulationConfig) =>
+    invoke<Simulation>("simulation_save", { id, name, config }),
+  simulationDelete: (id: number) => invoke<void>("simulation_delete", { id }),
+  /** Runs in the Python sidecar; a failed run comes back with `error` set. */
+  simulationRun: (id: number) => invoke<Simulation>("simulation_run", { id }),
   sidecarPing: () => invoke<SidecarPing>("sidecar_ping"),
 };
 

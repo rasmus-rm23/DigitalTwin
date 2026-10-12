@@ -368,6 +368,29 @@ pub fn training_request(conn: &Connection, id: i64) -> AppResult<(ModelConfig, J
     Ok((c, request))
 }
 
+/// What a model's last successful training produced: the definition it was trained with,
+/// the pickled artifact (base64) and when.
+pub struct Trained {
+    pub config: ModelConfig,
+    pub artifact: String,
+    pub trained_at: String,
+}
+
+/// `None` when the model has never been trained successfully.
+pub fn trained(conn: &Connection, id: i64) -> AppResult<Option<Trained>> {
+    type Row = (Option<String>, Option<String>, Option<String>);
+    let row: Option<Row> = conn
+        .query_row("SELECT trained_config, artifact, trained_at FROM model WHERE id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })
+        .optional()?;
+    let (config, artifact, trained_at) = row.ok_or_else(|| AppError::InvalidInput(format!("no model with id {id}")))?;
+    Ok(match (config.and_then(|c| serde_json::from_str(&c).ok()), artifact, trained_at) {
+        (Some(config), Some(artifact), Some(trained_at)) => Some(Trained { config, artifact, trained_at }),
+        _ => None,
+    })
+}
+
 /// Stores the outcome of a training run for the definition it was trained with.
 pub fn store_training(conn: &Connection, id: i64, trained: &ModelConfig, outcome: AppResult<Json>) -> AppResult<Model> {
     match outcome {
