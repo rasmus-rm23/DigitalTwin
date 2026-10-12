@@ -1,4 +1,6 @@
+import { IDockviewPanelProps } from "dockview-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlignedData } from "uplot";
 import {
   backend,
   BatchInfo,
@@ -8,12 +10,14 @@ import {
   PlotDef,
   PlotSheet,
   PlotSource,
+  SimulationResult,
+  SimulationSummary,
   TableInfo,
 } from "../api/backend";
 import { clearInspector, setInspector } from "../workspace/inspector";
 import { useWorkspace } from "../workspace/WorkspaceContext";
 import BatchesPanel from "./BatchesPanel";
-import { alignBatches, plotLines } from "./data";
+import { alignBatches, PlotEntry, plotLines, simulationSeries } from "./data";
 import PlotChart from "./PlotChart";
 import PlotSettingsPanel from "./PlotSettingsPanel";
 
@@ -31,8 +35,8 @@ function validConfig(c: PlotConfig) {
   return c.plots.every((p) => p.yMin == null || p.yMax == null || p.yMin < p.yMax);
 }
 
-/** The Plots view: batch-aligned time-series plots of one data table. */
-export default function PlotsView() {
+/** The Plots view: batch-aligned time-series plots of one data table, with simulation overlays. */
+export default function PlotsView({ api }: IDockviewPanelProps) {
   const { tables, tablesLoaded, openTable, showTool } = useWorkspace();
   const [sheet, setSheet] = useState<PlotSheet | null>(null);
   const [selectedPlot, setSelectedPlot] = useState<string | null>(null);
@@ -164,6 +168,56 @@ export default function PlotsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceKey(source), batchError, columns.join(","), renderedBatches.join("\u0000")]);
 
+  // --- Simulations: listed when the view is opened or shown again (they are run elsewhere) ---
+  const [simulations, setSimulations] = useState<SimulationSummary[]>([]);
+  useEffect(() => {
+    const load = () => backend.simulationsList().then(setSimulations).catch((e) => setError(errorMessage(e)));
+    void load();
+    const sub = api.onDidActiveChange((e) => e.isActive && void load());
+    return () => sub.dispose();
+  }, [api]);
+
+  /** Selected simulations with a result for this view's table. */
+  const renderedSims = useMemo(
+    () =>
+      simulations.filter(
+        (s) => (config?.simulations ?? []).includes(s.id) && s.runAt && source && s.tableId === source.tableId,
+      ),
+    [simulations, config?.simulations, source],
+  );
+  const simCache = useRef(new Map<string, SimulationResult>());
+  const [simResults, setSimResults] = useState<{ sim: SimulationSummary; result: SimulationResult }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      renderedSims.map(async (sim) => {
+        const key = `${sim.id}:${sim.runAt}`;
+        let result = simCache.current.get(key);
+        if (!result) {
+          result = (await backend.simulationGet(sim.id)).result ?? undefined;
+          if (result) simCache.current.set(key, result);
+        }
+        return result ? { sim, result } : null;
+      }),
+    )
+      .then((r) => !cancelled && setSimResults(r.filter((x) => x !== null)))
+      .catch((e) => !cancelled && setSeriesError(errorMessage(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [renderedSims]);
+
+  /** Batches, then simulations, as plotted. */
+  const entries = useMemo<PlotEntry[]>(() => {
+    const batchEntries = series.length === renderedBatches.length ? series.map((s) => ({ label: s.key || "All", series: s })) : [];
+    const simEntries = simResults.map(({ sim, result }) => ({
+      label: `Sim ${sim.name}`,
+      series: simulationSeries(sim.name, result, columns),
+      simColumns: new Set([...result.inputs, ...result.outputs].map((v) => v.column)),
+    }));
+    return [...batchEntries, ...simEntries];
+  }, [series, renderedBatches.length, simResults, columns]);
+
   // A table deleted or changed elsewhere: reload the sheet so the core can clean it up.
   const tablesSignature = tables.map((t) => `${t.id}:${t.columns.map((c) => c.kind).join(",")}`).join("|");
   const firstSignature = useRef<string | null>(null);
@@ -224,7 +278,8 @@ export default function PlotsView() {
             update((c) => ({ ...c, source: s, selectedBatches: [] }));
           }}
           onSelectBatches={(keys) => update((c) => ({ ...c, selectedBatches: keys }))}
-          onShowSimulations={(on) => update((c) => ({ ...c, showSimulations: on }))}
+          simulations={simulations}
+          onSelectSimulations={(ids) => update((c) => ({ ...c, simulations: ids }))}
           onOpenTable={openTable}
         />
       ),
@@ -265,8 +320,8 @@ export default function PlotsView() {
     ? "Choose a data table in the Batches tab on the right."
     : batchError
       ? batchError
-      : renderedBatches.length === 0
-        ? "Select one or more batches in the Batches tab."
+      : renderedBatches.length === 0 && renderedSims.length === 0
+        ? "Select one or more batches or simulations in the Batches tab."
         : seriesError;
 
   return (
@@ -314,9 +369,8 @@ export default function PlotsView() {
               plot={p}
               selected={p.id === selectedPlot}
               height={config.plotHeight}
-              series={series}
+              entries={entries}
               columns={columns}
-              batchKeys={renderedBatches}
               tableInfo={table}
               onSelect={() => {
                 setSelectedPlot(p.id);
@@ -340,28 +394,35 @@ function PlotCard({
   plot,
   selected,
   height,
-  series,
+  entries,
   columns,
-  batchKeys,
   tableInfo,
   onSelect,
 }: {
   plot: PlotDef;
   selected: boolean;
   height: number;
-  series: BatchSeries[];
+  entries: PlotEntry[];
   columns: number[];
-  batchKeys: string[];
   tableInfo: TableInfo | undefined;
   onSelect: () => void;
 }) {
   const table = tableInfo;
-  const lines = useMemo(() => plotLines(plot, batchKeys, table), [plot, batchKeys, table]);
-  const data = useMemo(() => {
+  // Lines and data per (entry, column), leaving out columns a simulation does not have.
+  const { lines, data } = useMemo(() => {
     const idx = plot.series.map((s) => columns.indexOf(s.column));
-    const ready = series.length === batchKeys.length && idx.every((i) => i >= 0);
-    return ready ? alignBatches(series, idx) : null;
-  }, [plot.series, columns, series, batchKeys.length]);
+    if (entries.length === 0 || !idx.every((i) => i >= 0)) return { lines: [], data: null };
+    const all = plotLines(plot, entries, table);
+    const [xs, ...ys] = alignBatches(
+      entries.map((e) => e.series),
+      idx,
+    );
+    const keep = entries.flatMap((e) => plot.series.map((s) => !e.simColumns || e.simColumns.has(s.column)));
+    return {
+      lines: all.filter((_, k) => keep[k]),
+      data: [xs, ...ys.filter((_, k) => keep[k])] as AlignedData,
+    };
+  }, [plot, columns, entries, table]);
 
   return (
     <div className={`plot-card${selected ? " selected" : ""}`} onMouseDown={onSelect}>
@@ -369,6 +430,10 @@ function PlotCard({
       {plot.series.length === 0 ? (
         <div className="plot-card-empty muted" style={{ height }}>
           Add tag columns in the Plot tab.
+        </div>
+      ) : data && lines.length === 0 ? (
+        <div className="plot-card-empty muted" style={{ height }}>
+          The selected simulations do not include these columns.
         </div>
       ) : data ? (
         <PlotChart data={data} lines={lines} height={height} yMin={plot.yMin} yMax={plot.yMax} syncKey={SYNC_KEY} />

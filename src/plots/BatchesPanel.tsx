@@ -1,4 +1,4 @@
-import { BatchInfo, PlotConfig, PlotSource, TableInfo } from "../api/backend";
+import { BatchInfo, PlotConfig, PlotSource, SimulationSummary, TableInfo } from "../api/backend";
 
 interface Props {
   config: PlotConfig;
@@ -7,7 +7,8 @@ interface Props {
   batchError: string | null;
   onSourceChange: (source: PlotSource | null) => void;
   onSelectBatches: (keys: string[]) => void;
-  onShowSimulations: (on: boolean) => void;
+  simulations: SimulationSummary[];
+  onSelectSimulations: (ids: number[]) => void;
   onOpenTable: (table: TableInfo) => void;
 }
 
@@ -25,7 +26,7 @@ export function defaultSource(table: TableInfo): PlotSource {
   };
 }
 
-/** Right-panel "Batches" tab: data source, batch selection, model simulations. */
+/** Right-panel "Batches" tab: data source, batch selection, simulation overlays. */
 export default function BatchesPanel(props: Props) {
   const { config, tables, batches, batchError } = props;
   const source = config.source;
@@ -138,17 +139,57 @@ export default function BatchesPanel(props: Props) {
         </>
       )}
 
-      <div className="props-kind">Model simulations</div>
-      <label className="checkbox" title="Available once models have been trained">
-        <input
-          type="checkbox"
-          checked={config.showSimulations}
-          disabled
-          onChange={(e) => props.onShowSimulations(e.target.checked)}
-        />
-        Show model simulations
-      </label>
-      <p className="muted">Available once models have been trained.</p>
+      <SimulationList {...props} />
     </div>
+  );
+}
+
+/** Simulations to overlay. Only those of a model on this view's table, with a result, can be shown. */
+function SimulationList({ config, simulations, onSelectSimulations }: Props) {
+  const tableId = config.source?.tableId;
+  const selected = new Set(config.simulations);
+  const usable = (s: SimulationSummary) => !!s.runAt && s.tableId === tableId;
+  function toggle(id: number) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectSimulations(simulations.map((s) => s.id).filter((i) => next.has(i)));
+  }
+  return (
+    <>
+      <div className="props-kind">Simulations</div>
+      {simulations.length === 0 ? (
+        <p className="muted">No simulations yet. Create one in View → Simulation.</p>
+      ) : (
+        <>
+          <p className="muted">Shown from t = 0 in plots of the simulated inputs and outputs.</p>
+          <ul className="batch-list">
+            {simulations.map((s) => (
+              <li key={s.id}>
+                <label
+                  className="checkbox"
+                  title={!s.runAt ? "Run the simulation first" : !usable(s) ? "The model uses another table" : undefined}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(s.id) && usable(s)}
+                    disabled={!usable(s)}
+                    onChange={() => toggle(s.id)}
+                  />
+                  <span className="batch-key">{s.name}</span>
+                </label>
+                <span className="muted">
+                  {!s.runAt
+                    ? "not run yet"
+                    : !usable(s)
+                      ? "other table"
+                      : `run ${dateTime.format(new Date(s.runAt))}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
   );
 }

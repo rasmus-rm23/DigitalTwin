@@ -72,9 +72,10 @@ pub struct PlotConfig {
     /// Height of each plot in px.
     #[serde(default = "default_height")]
     pub plot_height: f64,
-    /// Overlay model simulations (no models yet).
+    /// Simulations overlaid on the plots (ids). Their inputs and outputs are drawn in plots
+    /// showing the same columns, when the simulated model uses the same source table.
     #[serde(default)]
-    pub show_simulations: bool,
+    pub simulations: Vec<i64>,
     #[serde(default)]
     pub plots: Vec<PlotDef>,
 }
@@ -90,7 +91,7 @@ impl Default for PlotConfig {
             selected_batches: Vec::new(),
             layout: PlotLayout::default(),
             plot_height: default_height(),
-            show_simulations: false,
+            simulations: Vec::new(),
             plots: Vec::new(),
         }
     }
@@ -356,6 +357,14 @@ mod tests {
         };
         let t = import::run(&mut p.conn, &file, &opts, |_| {}).unwrap().table;
         (p, t.id)
+    }
+
+    #[test]
+    fn sheets_saved_before_simulation_overlays_still_load() {
+        let old = r#"{"source":null,"selectedBatches":["B1"],"layout":"pairs","plotHeight":300,"showSimulations":false,"plots":[]}"#;
+        let c: PlotConfig = serde_json::from_str(old).unwrap();
+        assert_eq!(c.selected_batches, ["B1"]);
+        assert!(c.simulations.is_empty());
     }
 
     #[test]

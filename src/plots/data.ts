@@ -1,6 +1,6 @@
 // Turning per-batch series into uPlot data and series styling.
 import { AlignedData } from "uplot";
-import { BatchSeries, PlotDef, TableInfo } from "../api/backend";
+import { BatchSeries, PlotDef, SimulationResult, TableInfo } from "../api/backend";
 
 export const PALETTE = [
   "#4fc1ff",
@@ -45,19 +45,39 @@ export function alignBatches(batches: BatchSeries[], columns: number[]): Aligned
   return [xs, ...ys] as AlignedData;
 }
 
+/** A rendered batch or simulation: its legend label and series. */
+export interface PlotEntry {
+  label: string;
+  series: BatchSeries;
+  /** Simulations only: the columns they have values for (their model's inputs and outputs). */
+  simColumns?: Set<number>;
+}
+
 /**
- * One line per (batch, column). Colour shows the batch when several are rendered,
- * otherwise the column; with both several batches and columns, dashes show the column.
+ * A simulation result as a batch: one value array per requested column (null where the
+ * simulation does not have that column).
  */
-export function plotLines(def: PlotDef, batchKeys: string[], table: TableInfo | undefined): PlotLine[] {
-  const multiBatch = batchKeys.length > 1;
+export function simulationSeries(key: string, result: SimulationResult, columns: number[]): BatchSeries {
+  const byColumn = new Map<number, (number | null)[]>();
+  for (const v of [...result.inputs, ...result.outputs]) byColumn.set(v.column, v.values);
+  const empty = result.hours.map(() => null);
+  return { key, hours: result.hours, values: columns.map((c) => byColumn.get(c) ?? empty) };
+}
+
+/**
+ * One line per (entry, column). Colour shows the batch or simulation when several are rendered,
+ * otherwise the column; with both several entries and columns, dashes show the column.
+ */
+export function plotLines(def: PlotDef, entries: PlotEntry[], table: TableInfo | undefined): PlotLine[] {
+  const multiBatch = entries.length > 1;
   const multiColumn = def.series.length > 1;
   const lines: PlotLine[] = [];
-  batchKeys.forEach((key, b) => {
+  entries.forEach(({ label, simColumns }, b) => {
     def.series.forEach((s, c) => {
       const name = table?.columns[s.column]?.name ?? `column ${s.column + 1}`;
       lines.push({
-        label: multiBatch ? `${key || "All"} · ${name}` : name,
+        // A simulation is always named, so it is not mistaken for measured data.
+        label: multiBatch || simColumns ? `${label} · ${name}` : name,
         stroke: multiBatch ? PALETTE[b % PALETTE.length] : (s.color ?? PALETTE[c % PALETTE.length]),
         dash: multiBatch && multiColumn ? DASHES[c % DASHES.length] : [],
       });

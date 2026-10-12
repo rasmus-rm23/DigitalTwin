@@ -208,14 +208,18 @@ Project files use the extension `.dtwin` (a SQLite database inside).
 
 - Charts use uPlot. One plot sheet per project (`plot_sheet`, config as one JSON document
   validated by `domain/plots.rs`): source (table, batch column or none, time column), selected
-  batches, layout (stacked / pairs), plot height, simulations flag (disabled until models exist),
+  batches, layout (stacked / pairs), plot height, overlaid simulation ids,
   plots (title, series columns + colours, optional y min/max). Autosaved like the P&ID.
 - `plot_batches` lists batches (creates an index on the batch column); `plot_batch_series` returns
   one batch's numeric columns with time in hours since the batch's first sample (t = 0).
 - Batches are merged onto one shared, non-decreasing x axis (`plots/data.ts`). Duplicate time
   stamps within a batch are allowed, so do not use `uPlot.join` (it merges equal x values).
   Lines span the other batches' null positions; legends show each line's nearest sample.
-- Colour = batch when several batches are shown (dashes then tell columns apart), else the column.
+- Simulation overlays: a selected simulation with a result whose model uses the sheet's table is
+  drawn like another batch (from t = 0), only in plots of columns it has (its model's inputs and
+  outputs), labelled "Sim <name>". `simulations_list` gives each simulation's table; results are
+  fetched with `simulation_get` and cached per run time. The list refreshes when the tab is activated.
+- Colour = batch (or simulation) when several are shown (dashes then tell columns apart), else the column.
 - The view publishes the right-panel "Batches" and "Plot" tabs via `inspector.ts`; selecting or
   adding a plot calls `showTool("plot")`.
 
@@ -319,7 +323,7 @@ or the sidecar must be killed.
   training runs synchronously and reports no progress).
 - Import: cancel, re-import from the stored options, appending to an existing table.
 - Plots: several plot sheets, x-axis zoom shared across plots, relations to other tables
-  (e.g. QC results per batch), model simulation overlay.
+  (e.g. QC results per batch), model predictions for measured batches.
 - Simulation: starting from a measured batch's state/history, comparing several scenarios in one
   plot, optimisation of manipulable inputs within bounds.
 

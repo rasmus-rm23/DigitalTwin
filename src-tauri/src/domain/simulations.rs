@@ -111,7 +111,10 @@ pub struct SimModel {
 pub struct SimulationSummary {
     pub id: i64,
     pub name: String,
+    /// Set once the simulation has a result.
     pub run_at: Option<String>,
+    /// Source table of the simulated (trained) model; its columns are the simulation's variables.
+    pub table_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -130,11 +133,25 @@ pub struct Simulation {
 }
 
 pub fn list(conn: &Connection) -> AppResult<Vec<SimulationSummary>> {
-    let mut stmt = conn.prepare("SELECT id, name, run_at FROM simulation ORDER BY name COLLATE NOCASE")?;
+    let mut stmt = conn.prepare("SELECT id, name, run_at, config FROM simulation ORDER BY name COLLATE NOCASE")?;
     let rows = stmt
-        .query_map([], |r| Ok(SimulationSummary { id: r.get(0)?, name: r.get(1)?, run_at: r.get(2)? }))?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(rows)
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, String>(3)?)))?
+        .collect::<Result<Vec<(i64, String, Option<String>, String)>, _>>()?;
+    rows.into_iter()
+        .map(|(id, name, run_at, config)| {
+            let model_id = serde_json::from_str::<SimulationConfig>(&config).ok().and_then(|c| c.model_id);
+            let table_id = match model_id {
+                // A deleted model counts as no model.
+                Some(mid) => match models::trained(conn, mid) {
+                    Ok(t) => t.and_then(|t| t.config.source).map(|s| s.table_id),
+                    Err(AppError::InvalidInput(_)) => None,
+                    Err(e) => return Err(e),
+                },
+                None => None,
+            };
+            Ok(SimulationSummary { id, name, run_at, table_id })
+        })
+        .collect()
 }
 
 pub fn get(conn: &Connection, id: i64) -> AppResult<Simulation> {
@@ -430,7 +447,10 @@ mod tests {
         assert_eq!(s.config.inputs.len(), 2);
         assert_eq!(s.config.inputs[1].mode, ProfileMode::Fixed);
         assert_eq!(s.config.inputs[1].value, 29.0);
-        assert_eq!(list(&p.conn).unwrap().len(), 2);
+        let summaries = list(&p.conn).unwrap();
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].table_id, None, "S0 has no model");
+        assert_eq!(summaries[1].table_id, config.source.map(|s| s.table_id));
     }
 
     #[test]

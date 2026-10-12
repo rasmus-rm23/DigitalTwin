@@ -188,7 +188,8 @@ export interface PlotConfig {
   layout: "stacked" | "pairs";
   /** px per plot, 80-2000. */
   plotHeight: number;
-  showSimulations: boolean;
+  /** Simulation ids overlaid on the plots (aligned at t = 0 like batches). */
+  simulations: number[];
   plots: PlotDef[];
 }
 
@@ -343,7 +344,10 @@ export interface SimModel {
 export interface SimulationSummary {
   id: number;
   name: string;
+  /** Set once the simulation has a result. */
   runAt: string | null;
+  /** Source table of the simulated model; the simulation's variables are its columns. */
+  tableId: number | null;
 }
 
 export interface SimulationResult {
